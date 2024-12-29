@@ -1,0 +1,8 @@
+{
+    "environmentName": "clip-cognition-dev",
+    "cosmosDbAccount": "cosmos",
+    "openAiAccount": "openai",
+    "userAssignedIdentity": "ua-id",
+    "appServiceWebApp": "web",
+    "appServicePlan": "plan"
+}
