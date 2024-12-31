@@ -3,6 +3,9 @@ metadata description = 'Creates Role definition and assignment resources'
 @description('Database Account Name')
 param databaseAccountName string
 
+@description('storage account name')
+param storageAccountName string
+
 @description('Id of the service principals to assign database and app roles')
 param appPrincipalId string
 
@@ -11,6 +14,10 @@ param userPrincipalId string
 
 @description('Type of the principal')
 param principalType string
+
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
+  name: storageAccountName
+}
 
 resource database 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' existing = {
   name: databaseAccountName
@@ -64,6 +71,26 @@ module openaiUserAssignment '../core/security/role/assignment.bicep' = if (!empt
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd') // Cognitive Services OpenAI User built-in role
     principalId: userPrincipalId ?? ''
     principalType: !empty(principalType) ? principalType : 'User' // Principal type or current deployment user
+  }
+}
+
+module storageAccountRoleAssignmentUser '../core/storage/role-assignment.bicep' = {
+  name: 'storage-account-user-role-assignment'
+  params: {
+    accountName: storageAccount.name
+    principalId: userPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe') // Storage Blob Data Contributor built-in role
+    principalType: !empty(principalType) ? principalType : 'User' // Principal type or current deployment user
+  }
+}
+
+module storageAccountRoleAssignmentApp '../core/storage/role-assignment.bicep' = {
+  name: 'storage-account-app-role-assignment'
+  params: {
+    accountName: storageAccount.name
+    principalId: appPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe') // Storage Blob Data Contributor built-in role
+    principalType: 'ServicePrincipal' // Specify the principal type
   }
 }
 

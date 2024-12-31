@@ -108,6 +108,16 @@ module database 'app/cosmosdb.bicep' = {
   }
 }
 
+module storageAccount 'app/storage.bicep' = {
+  name: 'storage'
+  scope: resourceGroup
+  params: {
+    accountName: '${abbreviations.storageAccount}${resourceToken}'
+    location: location
+    tags: tags
+  }
+}
+
 module web 'app/web.bicep' = {
   name: 'web'
   scope: resourceGroup
@@ -152,6 +162,7 @@ module security 'app/security.bicep' = {
   scope: resourceGroup
   params: {
     databaseAccountName: database.outputs.accountName
+    storageAccountName: storageAccount.outputs.name
     appPrincipalId: identity.outputs.principalId
     userPrincipalId: !empty(principalId) ? principalId : ''
     principalType: principalType
@@ -166,6 +177,8 @@ output USER_ASSIGNED_ID_CLIENT_ID string = identity.outputs.clientId
 output USER_ASSIGNED_ID_PRINCIPAL_ID string = identity.outputs.principalId
 output USER_ASSIGNED_ID_RESOURCE_ID string = identity.outputs.resourceId
 
+// Storage Account
+output AZURE_STORAGE_ACCOUNT_ENDPOINT string = storageAccount.outputs.endpoint
 
 // AI outputs
 output AZURE_OPENAI_ACCOUNT_ENDPOINT_0 string = openai.outputs.endpoint_0
