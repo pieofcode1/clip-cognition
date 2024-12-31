@@ -54,9 +54,21 @@ module openAIAccounts '../core/aoai/account.bicep' = [
   }]
 
 var aoaiAccountMap = {
-  primary: openAIAccounts[0].outputs.name
-  secondary: openAIAccounts[1].outputs.name
+  primary: openAIAccounts[0]
+  secondary: openAIAccounts[1]
 }
+
+var deploymentList = map(deployments, (deployment, index) => {
+  name: deployment.name
+  parentAccountName: aoaiAccountMap[deployment.location].outputs.name
+  skuName: deployment.skuName
+  skuCapacity: deployment.skuCapacity
+  modelName: deployment.modelName
+  modelVersion: deployment.modelVersion
+  modelFormat: 'OpenAI'
+  location: deployment.location
+  endpoint: aoaiAccountMap[deployment.location].outputs.endpoint.value
+})
 
 @batchSize(1)
 module openAiModelDeployments '../core/aoai/deployment.bicep' = [
@@ -64,7 +76,8 @@ module openAiModelDeployments '../core/aoai/deployment.bicep' = [
     name: deployment.name
     params: {
       name: deployment.name
-      parentAccountName: aoaiAccountMap[deployment.location]
+      // parentAccountName: aoaiAccountMap[deployment.location].outputs.name
+      parentAccountName: openAIAccounts[deployment.location == 'primary' ? 0 : 1].outputs.name
       skuName: deployment.skuName
       skuCapacity: deployment.skuCapacity
       modelName: deployment.modelName
@@ -79,9 +92,4 @@ output endpoint_0 string = openAIAccounts[0].outputs.endpoint
 output name_1 string = openAIAccounts[1].outputs.name
 output endpoint_1 string = openAIAccounts[1].outputs.endpoint
 
-output deployments array = [
-  for (dep, index) in deployments: {
-    name: openAiModelDeployments[index].name
-    parentAccountName: aoaiAccountMap[dep.location]
-  }
-]
+output deployments object[] = deploymentList

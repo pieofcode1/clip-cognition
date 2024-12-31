@@ -53,7 +53,7 @@ resource site 'Microsoft.Web/sites@2024-04-01' = {
     type: enableSystemAssignedManagedIdentity
               ? (!empty(userAssignedManagedIdentityIds) ? 'SystemAssigned, UserAssigned' : 'SystemAssigned')
               : (!empty(userAssignedManagedIdentityIds) ? 'UserAssigned' : null)
-    userAssignedIdentities: enableSystemAssignedManagedIdentity ? toObject(userAssignedManagedIdentityIds, uaId => uaId, uaId => {}) : null
+    userAssignedIdentities: !empty(userAssignedManagedIdentityIds) ? toObject(userAssignedManagedIdentityIds, uaId => uaId, uaId => {}) : null
   }
   properties: {
     serverFarmId: plan.id

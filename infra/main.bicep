@@ -39,6 +39,15 @@ var tags = {
   repo: 'pieofcode1/clip-cognition'
 }
 
+// serviceName is used as value for the tag (azd-service-name) azd uses to identify deployment host
+param serviceName string = 'cc-web'
+
+var chatSettings = {
+  maxContextWindow: '3'
+  cacheSimilarityScore: '0.95'
+  productMaxResults: '10'
+}
+
 var openAiSettings = {
   completionModelName: 'gpt-4o'
   completionDeploymentName: 'gpt-4o'
@@ -99,6 +108,45 @@ module database 'app/cosmosdb.bicep' = {
   }
 }
 
+module web 'app/web.bicep' = {
+  name: 'web'
+  scope: resourceGroup
+  params: {
+    planName: !empty(appServicePlanName) ? appServicePlanName : '${abbreviations.appServicePlan}-${resourceToken}'
+    appName: !empty(appServiceWebAppName) ? appServiceWebAppName : '${abbreviations.appServiceWebApp}-${resourceToken}'
+    location: location
+    tags: tags
+    serviceTag: serviceName
+    databaseAccountEndpoint: database.outputs.endpoint
+    openaiEndpoint: openai.outputs.endpoint_0
+    openaiEndpoint2: openai.outputs.endpoint_1
+    cosmosdbSettings: {
+      databaseName: database.outputs.database.name
+      chatContainerName: database.outputs.containers[0].name
+      cacheContainerName: database.outputs.containers[1].name
+      videoAssetsContainerName: database.outputs.containers[2].name
+      videoAssetFramesContainerName: database.outputs.containers[3].name
+    }
+    openaiSettings: {
+      completionDeploymentEndpoint: openai.outputs.deployments[0].endpoint
+      completionDeploymentName: openai.outputs.deployments[0].name
+      embeddingDeploymentEndpoint: openai.outputs.deployments[1].endpoint
+      embeddingDeploymentName: openai.outputs.deployments[1].name
+      whisperDeploymentEndpoint: openai.outputs.deployments[2].endpoint
+      whisperDeploymentName: openai.outputs.deployments[2].name
+    }
+    chatSettings: {
+      maxContextWindow: chatSettings.maxContextWindow
+      cacheSimilarityScore: chatSettings.cacheSimilarityScore
+      productMaxResults: chatSettings.productMaxResults
+    }
+    userAssignedManagedIdentity: {
+      resourceId: identity.outputs.resourceId
+      clientId: identity.outputs.clientId
+    }
+  }
+}
+
 module security 'app/security.bicep' = {
   name: 'security'
   scope: resourceGroup
@@ -111,9 +159,13 @@ module security 'app/security.bicep' = {
 }
 
 // Outputs
+output AZURE_TENANT_ID string = identity.outputs.tenantId
 output RESOURCE_GROUP_NAME string = resourceGroup.name
 output USER_ASSIGNED_ID_NAME string = identity.outputs.name
-output AZURE_TENANT_ID string = identity.outputs.tenantId
+output USER_ASSIGNED_ID_CLIENT_ID string = identity.outputs.clientId
+output USER_ASSIGNED_ID_PRINCIPAL_ID string = identity.outputs.principalId
+output USER_ASSIGNED_ID_RESOURCE_ID string = identity.outputs.resourceId
+
 
 // AI outputs
 output AZURE_OPENAI_ACCOUNT_ENDPOINT_0 string = openai.outputs.endpoint_0
@@ -121,6 +173,9 @@ output AZURE_OPENAI_ACCOUNT_ENDPOINT_1 string = openai.outputs.endpoint_1
 output AZURE_OPENAI_COMPLETION_DEPLOYMENT_NAME string = openai.outputs.deployments[0].name
 output AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME string = openai.outputs.deployments[1].name
 output AZURE_OPENAI_WHISPER_DEPLOYMENT_NAME string = openai.outputs.deployments[2].name
+output AZURE_OPENAI_COMPLETION_DEPLOYMENT_ENDPOINT string = openai.outputs.deployments[0].endpoint
+output AZURE_OPENAI_EMBEDDING_DEPLOYMENT_ENDPOINT string = openai.outputs.deployments[1].endpoint
+output AZURE_OPENAI_WHISPER_DEPLOYMENT_ENDPOINT string = openai.outputs.deployments[2].endpoint
 output AZURE_OPENAI_MAX_RAG_TOKENS string = openAiSettings.maxRagTokens
 output AZURE_OPENAI_MAX_CONTEXT_TOKENS string = openAiSettings.maxContextTokens
 
@@ -131,3 +186,8 @@ output AZURE_COSMOS_DB_CHAT_CONTAINER_NAME string = database.outputs.containers[
 output AZURE_COSMOS_DB_CACHE_CONTAINER_NAME string = database.outputs.containers[1].name
 output AZURE_COSMOS_DB_VIDEO_ASSETS_CONTAINER_NAME string = database.outputs.containers[2].name
 output AZURE_COSMOS_DB_VIDEO_ASSET_FRAMES_CONTAINER_NAME string = database.outputs.containers[3].name
+
+// Chat outputs
+output AZURE_CHAT_MAX_CONTEXT_WINDOW string = chatSettings.maxContextWindow
+output AZURE_CHAT_CACHE_SIMILARITY_SCORE string = chatSettings.cacheSimilarityScore
+output AZURE_CHAT_PRODUCT_MAX_RESULTS string = chatSettings.productMaxResults
