@@ -113,6 +113,7 @@ module storageAccount 'app/storage.bicep' = {
   scope: resourceGroup
   params: {
     accountName: '${abbreviations.storageAccount}${resourceToken}'
+    containerName: abbreviations.storageContainer
     location: location
     tags: tags
   }
@@ -179,6 +180,7 @@ output USER_ASSIGNED_ID_RESOURCE_ID string = identity.outputs.resourceId
 
 // Storage Account
 output AZURE_STORAGE_ACCOUNT_ENDPOINT string = storageAccount.outputs.endpoint
+output AZURE_STORAGE_CONTAINER_NAME string = storageAccount.outputs.containerName
 
 // AI outputs
 output AZURE_OPENAI_ACCOUNT_ENDPOINT_0 string = openai.outputs.endpoint_0

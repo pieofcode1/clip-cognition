@@ -2,6 +2,7 @@
     "environmentName": "clip-cognition-dev",
     "cosmosDbAccount": "cosmos",
     "storageAccount": "store",
+    "storageContainer": "clip-cognition",
     "openAiAccount": "openai",
     "userAssignedIdentity": "ua-id",
     "appServiceWebApp": "web",
