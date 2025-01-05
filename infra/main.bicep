@@ -193,6 +193,7 @@ output AZURE_OPENAI_EMBEDDING_DEPLOYMENT_ENDPOINT string = openai.outputs.deploy
 output AZURE_OPENAI_WHISPER_DEPLOYMENT_ENDPOINT string = openai.outputs.deployments[2].endpoint
 output AZURE_OPENAI_MAX_RAG_TOKENS string = openAiSettings.maxRagTokens
 output AZURE_OPENAI_MAX_CONTEXT_TOKENS string = openAiSettings.maxContextTokens
+output AZURE_OPENAI_API_VERSION string = '2024-10-21'
 
 // Database outputs
 output AZURE_COSMOS_DB_ENDPOINT string = database.outputs.endpoint
