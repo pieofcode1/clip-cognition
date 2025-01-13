@@ -93,25 +93,25 @@ var containers = [
       indexingMode: 'consistent'
       includedPaths: [
         {
-          path: '/blob_audio_key/?'
-        }
-        {
-          path: '/blob_video_key/?'
+          path: '/*'
         }
       ]
       excludedPaths: [
         {
-          path: '/*'
+          path: '/audio_summary_vector/?'
+        }
+        {
+          path: '/video_summary_vector/?'
         }
       ]
       vectorIndexes: [
         {
           path: '/audio_summary_vector'
-          type: 'quantizedFlat'
+          type: 'diskANN'
         }
         {
           path: '/video_summary_vector'
-          type: 'quantizedFlat'
+          type: 'diskANN'
         }
       ]
       fullTextIndexes: [
@@ -162,10 +162,13 @@ var containers = [
       automatic: true
       indexingMode: 'consistent'
       includedPaths: [
+        {
+          path: '/*'
+        }
       ]
       excludedPaths: [
         {
-          path: '/*'
+          path: '/summary_vector/?'
         }
       ]
       vectorIndexes: [
