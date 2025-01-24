@@ -75,7 +75,7 @@ def show_video_details():
 
                 # Get the SAS URL for the frame
                 url = st.session_state.agent.get_video_frame_sas_url(summary.frame_id)
-                st.image(url, use_column_width=True)
+                st.image(url, use_container_width=True)
                 # st.subheader(summary.frame_id)
                 # display_raw_frame(summary.raw_data)
 

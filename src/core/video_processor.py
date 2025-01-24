@@ -97,21 +97,12 @@ class VideoProcessingAgent(object):
     def _init_cosmos_util(self):
         self.cosmos_util = CosmosUtil(
             database=os.environ["AZURE_COSMOS_DB_DATABASE_NAME"],
+            containers=[
+                os.environ["AZURE_COSMOS_DB_VIDEO_ASSETS_CONTAINER_NAME"],
+                os.environ["AZURE_COSMOS_DB_VIDEO_ASSET_FRAMES_CONTAINER_NAME"]
+            ],
             embedding_agent=AzureOpenAIEmbeddingsAgent()
         )
-
-        self.cosmos_util.add_containers([
-            os.environ["AZURE_COSMOS_DB_VIDEO_ASSETS_CONTAINER_NAME"],
-            os.environ["AZURE_COSMOS_DB_VIDEO_ASSET_FRAMES_CONTAINER_NAME"]
-        ])
-
-        # Create the required containers
-        # self.cosmos_util.create_container_with_vectors("CC_VideoAssets", "/asset_name", ["/audio_summary_vector", "/video_summary_vector"])
-        # self.cosmos_util.create_container_with_vectors("CC_VideoAssetFrames", "/asset_name", ["/summary_vector"])
-        # self.cosmos_util.add_containers([
-        #       "CC_VideoAssets", 
-        #       "CC_VideoAssetFrames", 
-        #       "CC_VideoAssetAudio"])
         
     def _init_storage_helper(self):
             self.storage_helper = StorageHelper(

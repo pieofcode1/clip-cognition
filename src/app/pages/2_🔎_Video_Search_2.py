@@ -3,13 +3,14 @@ import streamlit as st
 from pathlib import Path
 import pandas as pd
 from core.schema import *
-from core.class_definitions import *
+from core.agent_factory import *
 from core.storage_helper import StorageHelper
 
 
 @st.cache_resource
-def create_ignite_search_agent(vector_store_type: str):
+def create_cosmos_search_agent(vector_store_type: str):
     return VectorSearchAgentFactory.create_vector_search_agent(vector_store_type=vector_store_type)
+
 
 @st.cache_resource
 def create_ignite_storage_agent():
@@ -18,38 +19,17 @@ def create_ignite_storage_agent():
         )
     return storage_agent
 
+
 def perform_vector_search(prompt, limit=1):
 
-    projection=["id", "frame_id", "asset_name", "summary", "frame_id"]
+    projection=["id", "frame_id", "asset_name", "summary"]
     asset_frames_container_name = os.environ["AZURE_COSMOS_DB_VIDEO_ASSET_FRAMES_CONTAINER_NAME"]
-
-    response = st.session_state.search_agent.perform_vector_search(asset_frames_container_name, query=prompt, attr_name="summary_vector", projection=projection, limit=limit)  
-    # print(response)
-
-    # if st.session_state.vector_store == VectorStoreType.CosmosNoSQL.value:
-    #     print("Searching in Cosmos DB NoSQL")
-    #     prompt_vector = generate_embeddings(prompt)
-    #     response = st.session_state.search_agent.perform_vector_search(
-    #         "CC_VideoAssetFrames", prompt_vector, 
-    #         content_vector_field="summary_vector", projection=projection , limit=limit)
-
-    # elif st.session_state.vector_store == VectorStoreType.CosmosMongoVCore.value:
-    #     print("Searching in Cosmos DB Mongo VCore")
-    #     response = st.session_state.search_agent.perform_vector_search("CC_VideoAssetFrames", "summary_vector", prompt, limit=limit)
-
-    # elif st.session_state.vector_store == VectorStoreType.AISearch.value:
-    #     print("Searching in AI Search")
-    #     response = perform_vector_search(
-    #                         st.session_state.index_client, 
-    #                         index_name="cc-video-asset-frames-index", 
-    #                         vectorized_query=prompt, 
-    #                         projection=projection 
-    #         )
-        
-    # else:
-    #     raise ValueError(f"Invalid vector store type: {st.session_state.vector_store}")
+    print(f"Performing vector search in container: {asset_frames_container_name}")
+    response = st.session_state.search_agent.perform_vector_search(collection_name=asset_frames_container_name, query=prompt, attr_name="summary_vector", projection=projection, limit=limit)  
+    print(response)
 
     return response
+
 
 def main():
 
@@ -58,10 +38,8 @@ def main():
     # Initialize Session state
     if "search_agent" not in st.session_state:
         st.session_state.search_agent = None
-        st.session_state.index_client = None
         st.session_state.storage_agent = create_ignite_storage_agent()
 
-    
     if "vector_store" not in st.session_state:
         st.session_state.vector_store = None
 
@@ -72,16 +50,17 @@ def main():
 
     # Sidebar configuration
     with st.sidebar:    
-        st.session_state.vector_store = st.selectbox(
+        vector_store = st.selectbox(
             ":blue[Vector Store]",
             options=[vector_store_type.value for vector_store_type in VectorStoreType]
         )
-        print(f"Selected Vector Store: {st.session_state.vector_store}")
-        st.session_state.search_agent = create_ignite_search_agent(vector_store_type=st.session_state.vector_store)
+        print(f"Selected Vector Store: {vector_store}")
 
-    # if st.session_state.search_agent is None:
-        # st.session_state.search_agent = VectorSearchAgentFactory.create_vector_search_agent(vector_store_type=st.session_state.vector_store)
-
+    if (st.session_state.search_agent is None) or (st.session_state.vector_store != vector_store):
+        print(f"Creating {vector_store} search agent")
+        st.session_state.search_agent = VectorSearchAgentFactory.create_vector_search_agent(vector_store_type=vector_store)
+        st.session_state.vector_store = vector_store
+        print(f"Search Agent: {st.session_state.search_agent}")
 
     messages = st.container()
     if prompt := st.chat_input("Search text"):

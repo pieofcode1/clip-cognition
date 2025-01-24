@@ -25,12 +25,14 @@ class CosmosNoSQLVectorSearchAgent(VectorSearchAgent):
             os.environ["AZURE_COSMOS_DB_VIDEO_ASSETS_CONTAINER_NAME"], 
             os.environ["AZURE_COSMOS_DB_VIDEO_ASSET_FRAMES_CONTAINER_NAME"]
         ]
+        database_name = os.environ["AZURE_COSMOS_DB_DATABASE_NAME"]
+
         super().__init__(VectorStoreType.CosmosNoSQL, container_names)
-        cosmos_sql_agent = CosmosUtil(
+        self.client = CosmosUtil(
+            database=database_name,
             containers=container_names,
             embedding_agent = AzureOpenAIEmbeddingsAgent()
         )
-        self.client = cosmos_sql_agent
 
     def perform_vector_search(self, collection_name: str, attr_name: str, query: str, projection: list[str], limit: int) -> VectorSearchResult:
         response = self.client.perform_vector_search(

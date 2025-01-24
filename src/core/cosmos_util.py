@@ -9,11 +9,18 @@ import time
 from datetime import date, datetime
 import uuid
 import random
+import logging
+
+
 
 
 class CosmosUtil:
 
     def __init__(self, auth_type="mi", database="", containers=None, embedding_agent=None) -> None:
+
+        self.logger = logging.getLogger("AzureCosmosDB")
+        self.logger.setLevel(logging.DEBUG)
+
         self.database_name = database
         self.embedding_agent = embedding_agent
         container_names = list()
@@ -25,7 +32,7 @@ class CosmosUtil:
 
         self.container_map = dict()
 
-        if auth_type == "connection_str":
+        if auth_type == "conn_str":
             connection_string = os.environ["AZURE_COSMOS_CONNECTION_STRING"]
             self.cosmos_client = CosmosClient.from_connection_string(connection_string)
         elif auth_type == "mi":
@@ -41,8 +48,8 @@ class CosmosUtil:
             database = os.environ["AZURE_COSMOS_DB_DATABASE_NAME"]
 
         self.database_client = self.cosmos_client.create_database_if_not_exists(
-            self.database_name)
-        print(f"Container Name: {container_names}")
+            self.database_name, logging_enable=True)
+        print(f"Containers: {container_names}")
         
         for name in container_names:
             self.container_map[name] = self.database_client.get_container_client(
@@ -180,28 +187,38 @@ class CosmosUtil:
             raise
 
     def perform_vector_search(self, container_name: str, prompt: str, content_vector_field: str="summary_vector", projection: list = [], limit: int = 3):
+        
         container_client = self.container_map[container_name]
+        print(f"Container Client: {container_client}")
         prompt_vector = self.embedding_agent.get_text_embeddings(prompt)
         if len(projection) == 0:
             projected_fields = "*"
         else:
             projected_fields = ", ".join([f"c.{p}" for p in projection])
+        
+        # content_vector_field = f"c.{content_vector_field}"
 
+        # For debugging purpose
         # query=f"SELECT TOP {limit} {projected_fields}, VectorDistance(c.{content_vector_field}, {prompt_vector}) AS similarity_score FROM c ORDER BY VectorDistance(c.{content_vector_field}, {prompt_vector})"
         # print(f"Query: {query}")
+        # # write query in a file
+        # with open("query.sql", "w") as f:
+        #     f.write(query)
         
-        items = list(container_client.query_items(
-            query=f"SELECT TOP {limit} {projected_fields}, VectorDistance(c.{content_vector_field}, @embedding) AS similarity_score FROM c where VectorDistance(c.{content_vector_field}, @embedding) > 0.7 ORDER BY VectorDistance(c.{content_vector_field}, @embedding) ",
-            parameters=[
-                {"name":"@embedding", "value": prompt_vector},
-            ],
-            enable_cross_partition_query=True
-        ))
+        items = list(
+            container_client.query_items(
+                query=f"SELECT TOP @limit {projected_fields}, VectorDistance(c.{content_vector_field}, @prompt_vector) AS similarity_score FROM c ORDER BY VectorDistance(c.{content_vector_field}, @prompt_vector)",
+                parameters=[
+                    {"name": "@limit", "value": limit},
+                    # {"name": "@projected_fields", "value": projected_fields},
+                    # {"name": "@content_vector_field", "value": content_vector_field},
+                    {"name":"@prompt_vector", "value": prompt_vector}
+                ],
+                enable_cross_partition_query=True,
+                logging_enable=True
+            )
+        )
         print(f"Query Result: {items}")
-        # items = list()
-        # for item in result: 
-        #     print(json.dumps(item, indent=True))
-        #     items.append(item)
-        
+         
         return items
     

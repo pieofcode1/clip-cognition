@@ -98,16 +98,16 @@ var containers = [
       ]
       excludedPaths: [
         {
-          path: '/audio_summary_vector/?'
+          path: '/audio_summary_vector/*'
         }
         {
-          path: '/video_summary_vector/?'
+          path: '/video_summary_vector/*'
         }
       ]
       vectorIndexes: [
         {
           path: '/audio_summary_vector'
-          type: 'diskANN'
+          type: 'quantizedFlat'
         }
         {
           path: '/video_summary_vector'
@@ -168,7 +168,7 @@ var containers = [
       ]
       excludedPaths: [
         {
-          path: '/summary_vector/?'
+          path: '/summary_vector/*'
         }
       ]
       vectorIndexes: [
