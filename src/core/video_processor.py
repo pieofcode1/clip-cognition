@@ -25,13 +25,15 @@ np.set_printoptions(precision=16)
 
 
 class VideoProcessingAgent(object):
-    def __init__(self, video_file, vector_store_type, fps=5):
+    def __init__(self, video_file, vector_store_type, fps=5, system_prompt=None, frame_analysis_prompt=None):
         self.vector_store_type = vector_store_type
         self.id = str(uuid.uuid4())
         self.video_data = video_file.getvalue()
         self.audio_data = None
         self.is_complete = False
         self.fps = fps
+        self.system_prompt = system_prompt
+        self.frame_analysis_prompt = frame_analysis_prompt
         self.video_file_name = video_file.name
         self.blob_key_video = f"raw_files/video/{self.video_file_name}"
         self.blob_key_video_frame = f"raw_files/frames/{self.video_file_name}"
@@ -378,7 +380,7 @@ class VideoProcessingAgent(object):
         self.audio_summary = response.choices[0].message.content
 
     def summarize_video(self):
-        PROMPT_TEMPLATE = """
+        DEFAULT_PROMPT_TEMPLATE = """
 
             You an expert in extracting scene by scene details from sequence of frames of the video. 
             While analyzing the frames, you are required to follow the following steps:
@@ -393,6 +395,7 @@ class VideoProcessingAgent(object):
             %s
 
         """
+
         print(f"Summarizing {len(self.video_frames)} frames...")
 
         previous_context = ""
@@ -401,25 +404,39 @@ class VideoProcessingAgent(object):
             frame_url = self.blob_url_frames[index]
             frame_summary = VideoFrameSummary(id=str(uuid.uuid4()), frame_id=index * self.fps, asset_name=self.video_file_name, url=frame_url)
             print(f"Processing frame {frame_summary.frame_id}")
+            PROMPT_TEMPLATE = self.system_prompt if self.system_prompt else DEFAULT_PROMPT_TEMPLATE % previous_context
+            print(f"Prompt Template: {PROMPT_TEMPLATE}")
             response = self.aoai_client_gpt4o.chat.completions.create(
                 model=self.gpt4o_deployment_name,
                 messages=[
                     {
                         "role": "system", 
-                        "content": PROMPT_TEMPLATE % previous_context
+                        "content": PROMPT_TEMPLATE
+                        # "content": PROMPT_TEMPLATE % previous_context
                     },
                     {
                         "role": "user", 
                         "content": [
-                            {"type": "image_url", 
-                                "image_url": {"url": f'data:image/jpg;base64,{frame}', "detail": "low"}}
+                            {
+                                "type": "text",
+                                "text": self.frame_analysis_prompt if self.frame_analysis_prompt else "Analyze the frame and provide a detailed summary."
+                            },
+                            {
+                                "type": "image_url", 
+                                "image_url": {
+                                    "url": f'data:image/jpg;base64,{frame}', "detail": "low"
+                                }
+                            }
                         ],
                     }
                 ],
                 temperature=0,
             )
+            # print(response)
             previous_context: str = response.choices[0].message.content
             frame_summary.summary = previous_context
+            frame_summary.token_usage = response.usage
+            frame_summary.deployment_name = response.model
             frame_summary.summary_vector=self.vectorize(previous_context)
             frame_summary_dict = frame_summary.model_dump()
             # print(f"Frame Summary Dict: {frame_summary_dict}")

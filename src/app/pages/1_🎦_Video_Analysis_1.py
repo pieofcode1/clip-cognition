@@ -98,6 +98,12 @@ def main():
     if "vector_store" not in st.session_state:
         st.session_state.vector_store = None
 
+    if "system_prompt" not in st.session_state:
+        st.session_state.system_prompt = None
+
+    if "frame_analysis_prompt" not in st.session_state:
+        st.session_state.frame_analysis_prompt = None
+
     st.header(":blue[Clip Cognition] :cinema:")
     st.markdown("##### Cognitive analysis of video content")
     
@@ -126,13 +132,23 @@ def main():
         )
         frame_offset = st.slider("Frame offset", 1, 10, 5)
 
+        # System and User prompt
+        st.write(":blue[Prompts]")
+        tab_sys_prompt, tab_frame_prompt = st.tabs(["System", "Frame"])
+        with tab_sys_prompt:
+            st.session_state.system_prompt = st.text_area("System Prompt")
+        
+        with tab_frame_prompt:
+            st.session_state.frame_analysis_prompt = st.text_area("Frame Analysis Prompt")
+
+
         if video_file != None:
 
             # process the information from PDFs
             # with st.spinner("Processing..."):
 
             # Step 1: Get raw contents from video
-            st.session_state.agent = VideoProcessingAgent(video_file, vector_store_type=st.session_state.vector_store, fps=frame_offset)
+            st.session_state.agent = VideoProcessingAgent(video_file, vector_store_type=st.session_state.vector_store, fps=frame_offset, system_prompt=st.session_state.system_prompt, frame_analysis_prompt=st.session_state.frame_analysis_prompt)
             # To read file as bytes:
             video_data = video_file.getvalue()
             video_file_name = video_file.name

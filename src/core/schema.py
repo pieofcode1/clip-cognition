@@ -14,7 +14,7 @@ class TokenUsage(BaseModel):
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
-    total_cost: float
+    total_cost: float | None = None
 
 
 class LLMResponse(BaseModel):
@@ -131,6 +131,8 @@ class VideoFrameSummary(BaseModel):
     url: str
     summary: str = ''
     summary_vector: List = list()
+    token_usage: TokenUsage | None = None
+    deployment_name: str | None = None
     created_at: str = datetime.now().isoformat()
 
     @field_validator('summary_vector')
