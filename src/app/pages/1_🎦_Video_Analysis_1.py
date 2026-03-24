@@ -132,16 +132,6 @@ def main():
         )
         frame_offset = st.slider("Frame offset", 1, 10, 5)
 
-        # System and User prompt
-        st.write(":blue[Prompts]")
-        tab_sys_prompt, tab_frame_prompt = st.tabs(["System", "Frame"])
-        with tab_sys_prompt:
-            st.session_state.system_prompt = st.text_area("System Prompt")
-        
-        with tab_frame_prompt:
-            st.session_state.frame_analysis_prompt = st.text_area("Frame Analysis Prompt")
-
-
         if video_file != None:
 
             # process the information from PDFs
@@ -171,7 +161,17 @@ def main():
                     st.info("Video processing complete!")
                     st.session_state.agent.is_complete = True
                     # st.rerun()
-    
+
+                # System and User prompt
+        st.write(":blue[Prompts]")
+        tab_sys_prompt, tab_frame_prompt = st.tabs(["System", "Frame"])
+        with tab_sys_prompt:
+            st.session_state.system_prompt = st.text_area("System Prompt")
+        
+        with tab_frame_prompt:
+            st.session_state.frame_analysis_prompt = st.text_area("Frame Analysis Prompt")
+
+            
     tab_details, tab_audio, tab_video = st.tabs(["Details", "Audio", "Frames"])
 
     with tab_details:
