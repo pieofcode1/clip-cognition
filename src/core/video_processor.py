@@ -1,0 +1,449 @@
+import os
+import cv2
+import uuid
+from io import BytesIO
+from moviepy.editor import VideoFileClip, AudioFileClip
+import time
+import base64
+import numpy as np
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from core.storage_helper import StorageHelper
+from core.cosmos_util import CosmosUtil
+from core.embedding_agent import AzureOpenAIEmbeddingsAgent
+from core.cosmos_mongo_util import CosmosMongoClient
+from openai import AzureOpenAI
+import requests
+from typing import List
+import urllib.request
+from pydantic import BaseModel
+from core.schema import VideoFrameSummary, MediaAssetInfo, VectorStoreType
+from azure.core.exceptions import ResourceNotFoundError
+
+
+# Set the print options to display 16 decimal points
+np.set_printoptions(precision=16)
+
+
+class VideoProcessingAgent(object):
+    def __init__(self, video_file, vector_store_type, fps=5, system_prompt=None, frame_analysis_prompt=None):
+        self.vector_store_type = vector_store_type
+        self.id = str(uuid.uuid4())
+        self.video_data = video_file.getvalue()
+        self.audio_data = None
+        self.is_complete = False
+        self.fps = fps
+        self.system_prompt = system_prompt
+        self.frame_analysis_prompt = frame_analysis_prompt
+        self.video_file_name = video_file.name
+        self.blob_key_video = f"raw_files/video/{self.video_file_name}"
+        self.blob_key_video_frame = f"raw_files/frames/{self.video_file_name}"
+        self.blob_key_audio = f"raw_files/audio/{self.video_file_name.split('.')[0]}.mp3"
+        self.blob_url_video = None
+        self.blob_url_audio = None
+        self.blob_url_frames = list()
+        self.video_frames = list()
+        self.audio_transcription: str = None
+        self.audio_summary: str = None
+        self.video_summary: str = None
+        self.temp_folder = "./temp/"
+
+        if vector_store_type == VectorStoreType.CosmosNoSQL:
+            print("Initializing CosmosNoSQL as Vector Store")
+            self._init_cosmos_util()
+        elif vector_store_type == VectorStoreType.CosmosMongoVCore:
+            print("Initializing CosmosMongoVCore as Vector Store")
+            self._init_cosmos_mongo_client()
+        else:
+            raise ValueError(f"Invalid Vector Store Type: {vector_store_type}")
+
+        self._init_storage_helper()
+        self._init_openai_client()
+
+    def init_search_index_clients(self):
+        index_names = get_az_search_indices()
+        print (f"Existing Index Names: {index_names}")
+        if "cc-video-asset-index" not in index_names:
+            print("Creating Clip Cognition Video Asset Index")
+            create_clip_cognition_indices()
+
+        self.asset_index_client = get_ai_search_index_client("cc-video-asset-index")
+        self.asset_frames_index_client = get_ai_search_index_client("cc-video-asset-frames-index")
+        
+        # try:
+        #     self.asset_index_client = get_ai_search_index_client("cc-video-asset-index")
+        #     self.asset_frames_index_client = get_ai_search_index_client("cc-video-asset-frames-index")
+        # except ResourceNotFoundError as e:
+        #     print(f"Error initializing Azure AI Search Index Clients: {e}")
+        #     create_clip_cognition_indices()
+        #     self.asset_index_client = get_ai_search_index_client("cc-video-asset-index")
+        #     self.asset_frames_index_client = get_ai_search_index_client("cc-video-asset-frames-index")
+        # except Exception as e:
+        #     print(f"Error initializing Azure AI Search Index Clients: {e}")
+        #     raise e
+
+    def _init_cosmos_mongo_client(self):
+        self.cosmos_mongo_client = CosmosMongoClient(
+            os.environ["MONGODB_CONNECTION_STRING"],
+            "ClipCognition", 
+            embedding_agent=AzureOpenAIEmbeddingsAgent()
+        )
+        
+        self.cosmos_mongo_client.ping()
+        # self.cosmos_mongo_client.get_collection("CC_VideoAssets")
+        # self.cosmos_mongo_client.get_collection("CC_VideoAssetFrames")
+        # self.cosmos_mongo_client.create_vector_index("CC_VideoAssets", "audio_summary_vector", "AudioSummaryVectorIndex")
+        # self.cosmos_mongo_client.create_vector_index("CC_VideoAssets", "video_summary_vector", "VideoSummaryVectorIndex")
+        # self.cosmos_mongo_client.create_vector_index("CC_VideoAssetFrames", "summary_vector", "FrameSummaryVectorIndex")
+
+
+    def _init_cosmos_util(self):
+        self.cosmos_util = CosmosUtil(
+            database=os.environ["AZURE_COSMOS_DB_DATABASE_NAME"],
+            containers=[
+                os.environ["AZURE_COSMOS_DB_VIDEO_ASSETS_CONTAINER_NAME"],
+                os.environ["AZURE_COSMOS_DB_VIDEO_ASSET_FRAMES_CONTAINER_NAME"]
+            ],
+            embedding_agent=AzureOpenAIEmbeddingsAgent()
+        )
+        
+    def _init_storage_helper(self):
+            self.storage_helper = StorageHelper(
+                os.environ["AZURE_STORAGE_CONTAINER_NAME"]
+            )
+
+    def _init_openai_client(self):
+        aoai_chat_deployment_endpoint = os.environ["AZURE_OPENAI_COMPLETION_DEPLOYMENT_ENDPOINT"]
+        aoai_embedding_deployment_endpoint = os.environ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT_ENDPOINT"]
+        aoai_whisper_deployment_endpoint = os.environ["AZURE_OPENAI_WHISPER_DEPLOYMENT_ENDPOINT"]
+        azure_openai_api_version = os.environ["AZURE_OPENAI_API_VERSION"]
+
+        self.embedding_deployment_name = os.environ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME"]
+        self.gpt4o_deployment_name = os.environ["AZURE_OPENAI_COMPLETION_DEPLOYMENT_NAME"]
+        self.whisper_deployment_name = os.environ["AZURE_OPENAI_WHISPER_DEPLOYMENT_NAME"]
+        
+        # Set up the managed identity credentials
+        tenant_id = os.environ["AZURE_TENANT_ID"]
+        client_id = os.environ["USER_ASSIGNED_ID_CLIENT_ID"]
+
+        credential = DefaultAzureCredential(managed_identity_client_id=client_id)
+
+        # Define the scope for which you need the token
+        # Management Plane scope - 'https://management.azure.com/.default'
+        scope = "https://cognitiveservices.azure.com/.default"
+
+        token_provider = get_bearer_token_provider(credential, scope)
+
+        self.aoai_client_gpt4o = AzureOpenAI(
+            azure_endpoint=aoai_chat_deployment_endpoint,
+            azure_ad_token_provider=token_provider,  
+            api_version=azure_openai_api_version
+        )
+
+        self.aoai_client_whisper = AzureOpenAI(
+            azure_endpoint=aoai_whisper_deployment_endpoint,
+            azure_ad_token_provider=token_provider,  
+            api_version=azure_openai_api_version
+            
+        )
+
+        self.aoai_client_embedding = AzureOpenAI(
+            azure_endpoint=aoai_embedding_deployment_endpoint,
+            azure_ad_token_provider=token_provider,  
+            api_version=azure_openai_api_version
+        )
+
+
+    def _init_openai_client2(self):
+        azure_openai_endpoint_0 = os.environ["AZURE_OPENAI_ACCOUNT_ENDPOINT_0"]
+        azure_openai_endpoint_1 = os.environ["AZURE_OPENAI_ACCOUNT_ENDPOINT_1"]
+        azure_openai_key = os.environ["AZURE_OPENAI_API_KEY"] if len(os.environ["AZURE_OPENAI_API_KEY"]) > 0 else None
+        azure_openai_embedding_deployment = os.environ["AZURE_EMBEDDING_DEPLOYMENT_NAME"]
+        embedding_model_name = os.environ["AZURE_EMBEDDING_DEPLOYMENT_NAME"]
+        azure_openai_api_version = os.environ["OPENAI_API_VERSION"]
+        gpt4o_deployment_name = os.environ["AZURE_GPT4_TURBO_DEPLOYMENT_NAME"]
+        whisper_deployment_name = os.environ["AZURE_WHISPER_DEPLOYMENT_NAME"]
+        tts_deployment_name = os.environ["AZURE_TTS_DEPLOYMENT_NAME"]
+
+        self.aoai_client = AzureOpenAI(
+            api_key=azure_openai_key,  
+            api_version=azure_openai_api_version,
+            azure_endpoint=azure_openai_endpoint
+        )
+
+
+    def upload_blob_from_stream(self, data, key, mime_type=None):
+        blob_url = self.storage_helper.upload_blob_from_stream(
+            data, 
+            key,
+            mime_type
+        )
+        return blob_url
+    
+    def upload_blob_from_file(self, file_path, key, mime_type=None):
+        blob_url = self.storage_helper.upload_blob_with_key(
+            file_path, 
+            key,
+            mime_type
+        )
+        return blob_url
+    
+    def get_video_frame_sas_url(self, frame_id):
+        return self.storage_helper.generate_blob_sas_token(f"{self.blob_key_video_frame}/{frame_id}.png")
+    
+    def clip_video(self, start_time, end_time):
+        clip = VideoFileClip(BytesIO(self.video_data))
+        clip = clip.subclip(start_time, end_time)
+        clip.write_videofile("clipped_video.mp4")
+        # clip.write_videofile("subclip.mp4", codec="libx264")
+
+        return clip
+
+    def get_audio_from_video(self):
+        clip = VideoFileClip(BytesIO(self.video_data))
+        audio = clip.audio
+        # audio.write_audiofile("audio.mp3", bitrate="32k")
+        audio_data = audio_clip.to_soundarray()
+        audio_clip = AudioFileClip(audio_data)
+
+        return audio
+    
+    def insert_video_asset(self, video_asset_dict):
+
+        container_name = os.environ["AZURE_COSMOS_DB_VIDEO_ASSETS_CONTAINER_NAME"]
+
+        if self.vector_store_type == VectorStoreType.CosmosNoSQL:
+            self.cosmos_util.upsert_items(container_name, video_asset_dict)
+        elif self.vector_store_type == VectorStoreType.CosmosMongoVCore:
+            self.cosmos_mongo_client.insert(container_name, video_asset_dict)
+        else:
+            raise ValueError(f"Invalid Vector Store Type: {self.vector_store_type}")
+        
+    def insert_video_frame_asset(self, video_asset_frame_dict):
+
+        container_name = os.environ["AZURE_COSMOS_DB_VIDEO_ASSET_FRAMES_CONTAINER_NAME"]
+
+        if self.vector_store_type == VectorStoreType.CosmosNoSQL:
+            self.cosmos_util.upsert_items(container_name, video_asset_frame_dict)
+        elif self.vector_store_type == VectorStoreType.CosmosMongoVCore:
+            self.cosmos_mongo_client.insert(container_name, video_asset_frame_dict)
+        else:
+            raise ValueError(f"Invalid Vector Store Type: {self.vector_store_type}")
+
+    def vectorize(self, text):
+
+        vector = self.aoai_client_embedding.embeddings.create(input=text, model=self.embedding_deployment_name)
+        return vector.data[0].embedding if (vector and vector.data) else None
+
+    def process_video(self):
+        # base_video_path, _ = os.path.splitext(video_path)
+
+        # Upload video to blob storage
+        self.blob_url_video = self.upload_blob_from_stream(self.video_data, self.blob_key_video, "video/mp4")
+
+        video_link = self.storage_helper.generate_blob_sas_token(self.blob_key_video)
+        print(f"SAS Token Link: {video_link}")
+
+        # video = cv2.VideoCapture(videoBytesIO(_path)
+        # video_array = np.frombuffer(self.video_data, dtype=np.uint8)
+        video = cv2.VideoCapture(video_link)
+        # video.open(self.video_data)
+        # video = cv2.VideoCapture(BytesIO(self.video_data), apiPreference=cv2.CAP_FFMPEG)
+        total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = video.get(cv2.CAP_PROP_FPS)
+        frames_to_skip = int(fps * self.fps)
+        curr_frame=0
+
+        # Loop through the video and extract frames at specified sampling rate
+        while curr_frame < total_frames - 1:
+            video.set(cv2.CAP_PROP_POS_FRAMES, curr_frame)
+            success, frame = video.read()
+            if not success:
+                break
+            _, buffer = cv2.imencode(".jpg", frame)
+            self.video_frames.append(base64.b64encode(buffer).decode("utf-8"))
+            # base64Frames.append(base64.b64encode(buffer).decode("utf-8"))
+            curr_frame += frames_to_skip
+        video.release()
+        print(f"Extracted {len(self.video_frames)} frames")
+
+        # Extract audio from video
+        clip = VideoFileClip(video_link) 
+        # clip = VideoFileClip(self.video_data)
+        if clip.audio is None:
+            print("No audio found in the video")
+        else:
+            print("Current working directory: ", os.getcwd())
+
+            audio_path = f"{self.temp_folder}/{self.blob_key_audio}"
+            self.create_directory_from_file_path(audio_path)
+            clip.audio.write_audiofile(audio_path, bitrate="32k")
+            # audio_data = clip.audio.to_soundarray()
+            clip.audio.close()
+            clip.close()
+
+            # Get the absolute path
+            absolute_path = os.path.abspath(audio_path)
+            # Upload audio to blob storage
+            self.blob_url_audio = self.upload_blob_from_file(absolute_path, self.blob_key_audio, "audio/mp3")
+            self.blob_url_audio_with_sas = self.storage_helper.generate_blob_sas_token(self.blob_key_audio)
+            
+            print(f"Uploaded audio to {self.blob_url_audio}")
+                       
+            # Summarize the audio
+            self.summarize_audio(absolute_path)
+
+            # delete the local audio file
+            # os.remove(absolute_path)
+            # print(f"{absolute_path} has been successfully deleted.")
+
+        # Upload video frames to blob storage
+        self.upload_video_frames_to_blob(self.video_frames)
+
+        # Add video asset to Cosmos DB
+        video_asset = MediaAssetInfo(
+            id=self.id,
+            asset_name=self.video_file_name,
+            blob_video_key=self.blob_key_video,
+            blob_audio_key=self.blob_key_audio,
+            blob_video_url=self.blob_url_video,
+            blob_audio_url=self.blob_url_audio,
+            frame_offset=self.fps,
+            frame_count=len(self.video_frames),
+            duration=self.fps * len(self.video_frames),
+            total_frames=total_frames,
+            audio_transcription=self.audio_transcription,
+            audio_summary=self.audio_summary,
+            audio_summary_vector=self.vectorize(self.audio_summary) if (self.audio_summary) else [],
+            video_summary=self.video_summary,
+            video_summary_vector=self.vectorize(self.video_summary) if (self.video_summary) else []
+        )
+        video_asset_dict = video_asset.model_dump()
+
+        # Insert the video asset into the vector store based on the vector store type
+        self.insert_video_asset(video_asset_dict)
+
+        print(f"Video Asset: {video_asset_dict}")
+
+        print("Video processing completed.")
+        self.is_complete = True
+    
+    def upload_video_frames_to_blob(self, frames):
+        for idx, frame in enumerate(frames):
+            frame_name = f"{self.blob_key_video_frame}/{idx * self.fps}.png"
+            url = self.upload_blob_from_stream(base64.b64decode(frame), frame_name, "image/png")
+            self.blob_url_frames.append(url)
+    
+    def create_directory_from_file_path(self, file_path):
+        # Get the directory path from the file path
+        directory_path = os.path.dirname(file_path)
+        
+        # Create the directory if it does not exist
+        if not os.path.exists(directory_path):
+            os.makedirs(directory_path)
+            print(f"Directory '{directory_path}' created successfully.")
+        else:
+            print(f"Directory '{directory_path}' already exists.")
+
+    def summarize_audio(self, audio_path):
+        print("Summarizing audio...")
+
+        # f = urllib.request.urlopen(self.blob_url_audio_with_sas)
+        # audio_file = f.read()
+        # f = requests.get(self.blob_url_audio_with_sas)
+        # Transcribe the audio
+        transcription = self.aoai_client_whisper.audio.transcriptions.create(
+            model=self.whisper_deployment_name,
+            file=open(audio_path, "rb"),
+        )
+        self.audio_transcription = transcription.text
+
+        ## OPTIONAL: Uncomment the line below to print the transcription
+        print("Transcript: ", transcription.text + "\n\n")
+
+        response = self.aoai_client_gpt4o.chat.completions.create(
+            model=self.gpt4o_deployment_name,
+            messages=[
+                {
+                    "role": "system", 
+                    "content":""""You are an expert in generating a transcript summary. Create a summary of the provided transcription. Respond in Markdown."""
+                },
+                {
+                    "role": "user", 
+                    "content": [
+                        {"type": "text", "text": f"The audio transcription is: {transcription.text}"}
+                    ],
+                }
+            ],
+            temperature=0,
+        )
+        print(f"Summary: {response.choices[0].message.content}")
+        self.audio_summary = response.choices[0].message.content
+
+    def summarize_video(self):
+        DEFAULT_PROMPT_TEMPLATE = """
+
+            You an expert in extracting scene by scene details from sequence of frames of the video. 
+            While analyzing the frames, you are required to follow the following steps:
+
+            - Understand the overall context of the frames and Generate a detailed Chapter Analysis of the video based on the frames provided.
+            - Identify the scenes in each frame and build a detailed representation of the scenes.
+            - Considering the context of the previous frames and current frame, create a dense Chapter, Scene and Action summary of the video in markdown format.
+            - Never drop the context of the previous frames while analyzing the current frame.
+
+            ### Previous Frame Scene Representation
+
+            %s
+
+        """
+
+        print(f"Summarizing {len(self.video_frames)} frames...")
+
+        previous_context = ""
+        index = 0
+        for frame in self.video_frames:
+            frame_url = self.blob_url_frames[index]
+            frame_summary = VideoFrameSummary(id=str(uuid.uuid4()), frame_id=index * self.fps, asset_name=self.video_file_name, url=frame_url)
+            print(f"Processing frame {frame_summary.frame_id}")
+            PROMPT_TEMPLATE = self.system_prompt if self.system_prompt else DEFAULT_PROMPT_TEMPLATE % previous_context
+            print(f"Prompt Template: {PROMPT_TEMPLATE}")
+            response = self.aoai_client_gpt4o.chat.completions.create(
+                model=self.gpt4o_deployment_name,
+                messages=[
+                    {
+                        "role": "system", 
+                        "content": PROMPT_TEMPLATE
+                        # "content": PROMPT_TEMPLATE % previous_context
+                    },
+                    {
+                        "role": "user", 
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": self.frame_analysis_prompt if self.frame_analysis_prompt else "Analyze the frame and provide a detailed summary."
+                            },
+                            {
+                                "type": "image_url", 
+                                "image_url": {
+                                    "url": f'data:image/jpg;base64,{frame}', "detail": "low"
+                                }
+                            }
+                        ],
+                    }
+                ],
+                temperature=0,
+            )
+            # print(response)
+            previous_context: str = response.choices[0].message.content
+            frame_summary.summary = previous_context
+            frame_summary.token_usage = response.usage
+            frame_summary.deployment_name = response.model
+            frame_summary.summary_vector=self.vectorize(previous_context)
+            frame_summary_dict = frame_summary.model_dump()
+            # print(f"Frame Summary Dict: {frame_summary_dict}")
+            # Insert the video frame asset into the vector store based on the vector store type
+            self.insert_video_frame_asset(frame_summary_dict)
+
+            # print(response.choices[0].message.content)
+            index += 1
+            yield frame_summary
+

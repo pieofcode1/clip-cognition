@@ -1,0 +1,17 @@
+python-dotenv
+openai
+requests
+streamlit
+pymongo
+tenacity
+tiktoken
+azure-identity
+streamlit-agraph
+gremlinpython
+azure-storage-blob
+azure-cosmos
+azure-ai-documentintelligence
+azure-cognitiveservices-speech
+opencv-python==4.10.0.84
+moviepy==1.0.3
+pillow
