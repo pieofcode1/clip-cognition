@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "17988601586192781077"
+    },
+    "description": "Creates a firewall rule for an Azure DocumentDB cluster."
+  },
+  "parameters": {
+    "clusterName": {
+      "type": "string"
+    },
+    "ruleName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the firewall rule."
+      }
+    },
+    "startIpAddress": {
+      "type": "string",
+      "metadata": {
+        "description": "Start IP address of the allowed range."
+      }
+    },
+    "endIpAddress": {
+      "type": "string",
+      "metadata": {
+        "description": "End IP address of the allowed range."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.DocumentDB/mongoClusters/firewallRules",
+      "apiVersion": "2024-07-01",
+      "name": "[format('{0}/{1}', parameters('clusterName'), parameters('ruleName'))]",
+      "properties": {
+        "startIpAddress": "[parameters('startIpAddress')]",
+        "endIpAddress": "[parameters('endIpAddress')]"
+      }
+    }
+  ],
+  "outputs": {
+    "name": {
+      "type": "string",
+      "value": "[parameters('ruleName')]"
+    }
+  }
+}

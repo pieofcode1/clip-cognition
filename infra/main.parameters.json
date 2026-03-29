@@ -10,6 +10,15 @@
         },
         "principalId": {
             "value": "${AZURE_PRINCIPAL_ID}"
+        },
+        "documentDbAdminLogin": {
+            "value": "${AZURE_DOCUMENTDB_ADMIN_LOGIN}"
+        },
+        "documentDbAdminPassword": {
+            "value": "${AZURE_DOCUMENTDB_ADMIN_PASSWORD}"
+        },
+        "developerIpAddress": {
+            "value": "${AZURE_DEVELOPER_IP_ADDRESS}"
         }
     }
 }

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "1669347327086866169"
+    },
+    "description": "Creates an Azure RBAC role assignment scoped to a DocumentDB cluster."
+  },
+  "parameters": {
+    "clusterName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the DocumentDB cluster."
+      }
+    },
+    "principalId": {
+      "type": "string",
+      "metadata": {
+        "description": "The principal ID to assign the role to."
+      }
+    },
+    "principalType": {
+      "type": "string",
+      "defaultValue": "ServicePrincipal",
+      "allowedValues": [
+        "ServicePrincipal",
+        "User",
+        "Group"
+      ],
+      "metadata": {
+        "description": "The type of the principal."
+      }
+    },
+    "roleDefinitionId": {
+      "type": "string",
+      "metadata": {
+        "description": "The built-in role definition ID to assign."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.DocumentDB/mongoClusters', parameters('clusterName'))]",
+      "name": "[guid(subscription().id, resourceGroup().id, parameters('clusterName'), parameters('principalId'), parameters('roleDefinitionId'))]",
+      "properties": {
+        "principalId": "[parameters('principalId')]",
+        "principalType": "[parameters('principalType')]",
+        "roleDefinitionId": "[parameters('roleDefinitionId')]"
+      }
+    }
+  ],
+  "outputs": {
+    "id": {
+      "type": "string",
+      "value": "[extensionResourceId(resourceId('Microsoft.DocumentDB/mongoClusters', parameters('clusterName')), 'Microsoft.Authorization/roleAssignments', guid(subscription().id, resourceGroup().id, parameters('clusterName'), parameters('principalId'), parameters('roleDefinitionId')))]"
+    }
+  }
+}

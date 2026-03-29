@@ -7,11 +7,15 @@ param tags object = {}
 @description('The name of the storage account container.')
 param containerName string
 
+@description('Developer IP address to allow through the firewall.')
+param developerIpAddress string = ''
+
 module storageAccount '../core/storage/account.bicep' = {
   name: 'storageAccount'
   params: {
     accountName: accountName
     containerName: containerName
+    developerIpAddress: developerIpAddress
     location: location
     tags: tags
   }

@@ -1,106 +1,101 @@
-from enum import Enum
-from typing import List, Dict, Any
-from core.schema import *
-from core.embedding_agent import *
+"""Factory for creating vector search agents backed by different stores."""
+
+import logging
+import os
+from typing import Any, List
+
+from core.az_documentdb_util import AzDocumentDBClient
 from core.cosmos_util import CosmosUtil
-from core.cosmos_mongo_util import CosmosMongoClient
+from core.embedding_agent import AzureOpenAIEmbeddingsAgent
+from core.schema import VectorStoreType
+
+logger = logging.getLogger(__name__)
 
 
 class VectorSearchAgent:
+    """Base class for vector search operations."""
+
     def __init__(self, vector_store_type: VectorStoreType, container_names: List[str]) -> None:
         self.vector_store_type = vector_store_type
         self.container_names = container_names
 
-    def perform_vector_search(self, collection_name: str, attr_name: str, query: str, limit: int) -> VectorSearchResult:
+    def perform_vector_search(self, collection_name: str, attr_name: str, query: str, projection: list[str], limit: int) -> list[dict]:
         raise NotImplementedError
 
-    def perform_search(self, collection_name: str, filter: dict, limit: int) -> List[Dict[str, Any]]:
+    def perform_search(self, collection_name: str, filter: dict, limit: int) -> List[dict[str, Any]]:
         raise NotImplementedError
 
 
 class CosmosNoSQLVectorSearchAgent(VectorSearchAgent):
-    
+
     def __init__(self) -> None:
         container_names = [
-            os.environ["AZURE_COSMOS_DB_VIDEO_ASSETS_CONTAINER_NAME"], 
-            os.environ["AZURE_COSMOS_DB_VIDEO_ASSET_FRAMES_CONTAINER_NAME"]
+            os.environ["AZURE_COSMOS_DB_VIDEO_ASSETS_CONTAINER_NAME"],
+            os.environ["AZURE_COSMOS_DB_VIDEO_ASSET_FRAMES_CONTAINER_NAME"],
         ]
         database_name = os.environ["AZURE_COSMOS_DB_DATABASE_NAME"]
-
         super().__init__(VectorStoreType.CosmosNoSQL, container_names)
         self.client = CosmosUtil(
             database=database_name,
             containers=container_names,
-            embedding_agent = AzureOpenAIEmbeddingsAgent()
+            embedding_agent=AzureOpenAIEmbeddingsAgent(),
         )
 
-    def perform_vector_search(self, collection_name: str, attr_name: str, query: str, projection: list[str], limit: int) -> VectorSearchResult:
-        response = self.client.perform_vector_search(
-            collection_name, prompt=query, 
-            content_vector_field=attr_name, projection=projection , limit=limit)
-        
-        return response
-    
-    def perform_search(self, collection_name: str, filter: dict, limit: int) -> List[Dict[str, Any]]:
+    def perform_vector_search(self, collection_name: str, attr_name: str, query: str, projection: list[str], limit: int) -> list[dict]:
+        return self.client.perform_vector_search(
+            collection_name, prompt=query, content_vector_field=attr_name, projection=projection, limit=limit,
+        )
+
+    def perform_search(self, collection_name: str, filter: dict, limit: int) -> List[dict[str, Any]]:
         _, items = self.client.query_items(collection_name, filter, limit)
         return items
 
-class CosmosMongoVCoreVectorSearchAgent(VectorSearchAgent):
+
+class AzDocumentDBVectorSearchAgent(VectorSearchAgent):
 
     def __init__(self) -> None:
         container_names = [
-            os.environ["AZURE_COSMOS_DB_VIDEO_ASSETS_CONTAINER_NAME"], 
-            os.environ["AZURE_COSMOS_DB_VIDEO_ASSET_FRAMES_CONTAINER_NAME"]
+            os.environ["AZURE_COSMOS_DB_VIDEO_ASSETS_CONTAINER_NAME"],
+            os.environ["AZURE_COSMOS_DB_VIDEO_ASSET_FRAMES_CONTAINER_NAME"],
         ]
-        super().__init__(VectorStoreType.CosmosMongoVCore, container_names)
-        cosmos_mongo_client = CosmosMongoClient(
-            os.environ["MONGODB_CONNECTION_STRING"],
-            os.environ["MONGODB_DB_NAME"],
-            embedding_agent=AzureOpenAIEmbeddingsAgent()
-        )
-        self.client = create_cosmos_mongo_vector_search_agent(container_names=container_names)
+        super().__init__(VectorStoreType.AzureDocumentDB, container_names)
 
-    def perform_vector_search(self, collection_name: str, attr_name: str, query: str, projection: list[str], limit: int) -> VectorSearchResult:
-        response = self.client.perform_vector_search(collection_name, attr_name, prompt=query, projection=projection, limit=limit)
-        return response
-    
-    def perform_search(self, collection_name: str, filter: dict, limit: int) -> List[Dict[str, Any]]:
-        response = self.client.find(collection_name, filter, limit)
-        return response
-
-class AISearchVectorSearchAgent(VectorSearchAgent):
-
-    def __init__(self, index_names: List[str]) -> None:
-        self.index_collection_map = {
-            "CC_VideoAssets": "cc-video-asset-index",
-            "CC_VideoAssetFrames": "cc-video-asset-frames-index"
-        }
-        super().__init__(VectorStoreType.AISearch, container_names=index_names)
-        self.index_client_map = get_ai_search_index_clients(index_names=index_names)
-
-    def perform_vector_search(self, collection_name: str, attr_name: str, query: str, projection: list[str], limit: int) -> VectorSearchResult:
-        response = perform_vector_search(
-                            self.index_client_map[self.index_collection_map[collection_name]], 
-                            attr_name=attr_name,
-                            vectorized_query=query, 
-                            projection=projection 
+        conn_str = os.environ.get("MONGODB_CONNECTION_STRING", "")
+        if not conn_str or "<user>" in conn_str or "<password>" in conn_str:
+            raise ValueError(
+                "MONGODB_CONNECTION_STRING is not configured or still contains placeholders. "
+                "Run 'azd up' to provision DocumentDB and populate the connection string."
             )
-        return response
-    
-    def perform_search(self, collection_name: str, filter: dict, limit: int) -> List[Dict[str, Any]]:
-        pass
+
+        self.client = AzDocumentDBClient(
+            conn_str,
+            os.environ["MONGODB_DB_NAME"],
+            embedding_agent=AzureOpenAIEmbeddingsAgent(),
+        )
+
+        # Ensure vector indexes exist on DocumentDB collections
+        frames_container = os.environ["AZURE_COSMOS_DB_VIDEO_ASSET_FRAMES_CONTAINER_NAME"]
+        self.client.ensure_vector_index(frames_container, "summary_vector", "idx_summary_vector", dimensions=1536)
+
+        assets_container = os.environ["AZURE_COSMOS_DB_VIDEO_ASSETS_CONTAINER_NAME"]
+        self.client.ensure_vector_index(assets_container, "video_summary_vector", "idx_video_summary_vector", dimensions=1536)
+        self.client.ensure_vector_index(assets_container, "audio_summary_vector", "idx_audio_summary_vector", dimensions=1536)
+
+    def perform_vector_search(self, collection_name: str, attr_name: str, query: str, projection: list[str], limit: int) -> list[dict]:
+        return self.client.perform_vector_search(collection_name, attr_name, prompt=query, projection=projection, limit=limit)
+
+    def perform_search(self, collection_name: str, filter: dict, limit: int) -> List[dict[str, Any]]:
+        return self.client.find(collection_name, filter, limit)
 
 
 class VectorSearchAgentFactory:
 
     @staticmethod
     def create_vector_search_agent(vector_store_type: str) -> VectorSearchAgent:
-        print(f"Creating vector search agent for {vector_store_type}")
+        logger.info("Creating vector search agent for %s", vector_store_type)
         if vector_store_type == VectorStoreType.CosmosNoSQL.value:
             return CosmosNoSQLVectorSearchAgent()
-        elif vector_store_type == VectorStoreType.CosmosMongoVCore.value:
-            return CosmosMongoVCoreVectorSearchAgent()
-        elif vector_store_type == VectorStoreType.AISearch.value:
-            return AISearchVectorSearchAgent(index_names=["cc-video-asset-index", "cc-video-asset-frames-index"])
+        elif vector_store_type == VectorStoreType.AzureDocumentDB.value:
+            return AzDocumentDBVectorSearchAgent()
         else:
-            raise ValueError(f"Invalid vector store type: {vector_store_type}")
+            raise ValueError(f"Unsupported vector store type: {vector_store_type}")

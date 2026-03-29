@@ -7,6 +7,9 @@ param tags object = {}
 @description('The name of the storage account container.')
 param containerName string = ''
 
+@description('Developer IP address to allow through the firewall. Leave empty to allow all.')
+param developerIpAddress string = ''
+
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: accountName
   location: location
@@ -14,6 +17,23 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   kind: 'StorageV2'
   sku: {
     name: 'Standard_LRS'
+  }
+  properties: {
+    publicNetworkAccess: 'Enabled'
+    allowSharedKeyAccess: false
+    networkAcls: !empty(developerIpAddress) ? {
+      bypass: 'AzureServices'
+      defaultAction: 'Deny'
+      ipRules: [
+        {
+          action: 'Allow'
+          value: developerIpAddress
+        }
+      ]
+    } : {
+      bypass: 'AzureServices'
+      defaultAction: 'Allow'
+    }
   }
 }
 
