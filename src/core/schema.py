@@ -1,107 +1,23 @@
+"""Pydantic models and enums for the ClipCognition application."""
+
 import uuid
-from pydantic import BaseModel, ValidationError, field_validator
 from datetime import datetime
-from typing import Annotated, Dict, List, Literal, Tuple, Optional
 from enum import Enum
+from typing import List, Optional
+
+from pydantic import BaseModel, field_validator
+
 
 class VectorStoreType(str, Enum):
-    
-    CosmosNoSQL = 'CosmosDB NoSQL'
-    CosmosMongoVCore = 'CosmosDB Mongo vCore'
-    # AISearch = 'AI Search'
+    CosmosNoSQL = "CosmosDB NoSQL"
+    AzureDocumentDB = "Azure DocumentDB"
+
 
 class TokenUsage(BaseModel):
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
     total_cost: float | None = None
-
-
-class LLMResponse(BaseModel):
-    user_prompt: str
-    system_response: str | None = None
-    usage: TokenUsage
-    created_on: int = datetime.now().isoformat()
-
-
-class LLMStepRun(BaseModel):
-    batch_id: str
-    category: str
-    type: str
-    group: str
-    question: str
-    answer: str
-    docs: list[dict]
-    ts: str
-
-
-class BatchRun(BaseModel):
-    id: str
-    context: str
-    index_name: str
-    created_at: str = datetime.now().isoformat()
-
-
-class StepRun(BaseModel):
-    id: str
-    batch_id: str
-    context: str
-    name: str
-    category: str
-    group: str
-    question: str
-    persona: dict
-    answer: str
-    charges: dict
-    docs: list[dict]
-    index_name: str
-    created_at: str = datetime.now().isoformat()
-
-
-class Questionnaire(BaseModel):
-    id: str
-    name: str
-    category: str
-    title: str
-    description: str
-    personas: list[dict]
-    questions: list[dict]
-    _ts: int
-    _etag: str
-
-
-class Answer(BaseModel):
-    answer: str
-    persona: str
-
-
-class PersonaQnA(BaseModel):
-    question: str
-    answers: list[Answer]
-
-
-class QnAGroup(BaseModel):
-    group: str
-    responses: list[PersonaQnA]
-
-
-class QnASummary(BaseModel):
-    id: str
-    context: str
-    name: str
-    category: str
-    title: str
-    description: str
-    questions: list[QnAGroup]
-
-
-class ContextInfo(BaseModel):
-    id: str
-    document: str
-    index_name: str
-    vector_store: str
-    _ts: int
-    _etag: str
 
 
 class MediaAssetInfo(BaseModel):
@@ -120,8 +36,11 @@ class MediaAssetInfo(BaseModel):
     audio_summary_vector: Optional[List[float]] = None
     video_summary: Optional[str] = None
     video_summary_vector: Optional[List[float]] = None
-    created_at: str = datetime.now().isoformat()
+    created_at: str = ""
 
+    def model_post_init(self, __context) -> None:
+        if not self.created_at:
+            object.__setattr__(self, "created_at", datetime.now().isoformat())
 
 
 class VideoFrameSummary(BaseModel):
@@ -129,13 +48,19 @@ class VideoFrameSummary(BaseModel):
     frame_id: int
     asset_name: str
     url: str
-    summary: str = ''
-    summary_vector: List = list()
+    blob_frame_key: str = ""
+    summary: str = ""
+    summary_vector: List = []
     token_usage: TokenUsage | None = None
     deployment_name: str | None = None
-    created_at: str = datetime.now().isoformat()
+    created_at: str = ""
 
-    @field_validator('summary_vector')
+    def model_post_init(self, __context) -> None:
+        if not self.created_at:
+            object.__setattr__(self, "created_at", datetime.now().isoformat())
+
+    @field_validator("summary_vector")
+    @classmethod
     def convert_tuple_to_list(cls, v):
         if isinstance(v, tuple):
             return list(v)
@@ -149,20 +74,3 @@ class VectorSearchItem(BaseModel):
 
 class VectorSearchResult(BaseModel):
     items: List[VectorSearchItem]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,101 +1,79 @@
+"""Azure Blob Storage helper for upload, download, and SAS token generation."""
+
+import logging
 import os
-from azure.identity import ClientSecretCredential, DefaultAzureCredential
-from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient, ContentSettings
-from azure.core.exceptions import HttpResponseError, ResourceExistsError
-from datetime import datetime, timezone, timedelta
-from azure.storage.blob import ResourceTypes, AccountSasPermissions, generate_blob_sas, generate_account_sas
+from datetime import datetime, timedelta, timezone
+
+from azure.identity import DefaultAzureCredential
+from azure.storage.blob import (
+    AccountSasPermissions,
+    BlobServiceClient,
+    ContentSettings,
+    ResourceTypes,
+    generate_blob_sas,
+)
+
+logger = logging.getLogger(__name__)
 
 
-class StorageHelper(object):
+class StorageHelper:
+    """Wrapper around Azure Blob Storage operations for a single container."""
 
-    def __init__(self, container_name) -> None:
-
+    def __init__(self, container_name: str) -> None:
         endpoint = os.environ["AZURE_STORAGE_ACCOUNT_ENDPOINT"]
-        tenant_id = os.environ["AZURE_TENANT_ID"]
         client_id = os.environ["USER_ASSIGNED_ID_CLIENT_ID"]
 
         credential = DefaultAzureCredential(managed_identity_client_id=client_id)
         self.blob_service_client = BlobServiceClient(account_url=endpoint, credential=credential)
         self.container_client = self.blob_service_client.get_container_client(container_name)
-        
-        try:
-            self.container_client.create_container()
-        except ResourceExistsError as re:
-            # Container already created
-            print(f"Container [{container_name}] already created!")
-            pass
 
-    def upload_blob(self, file, mime_type=None): 
-        # Upload a blob to the container
-        content_settings = None
-        
-        if mime_type:
-            # Define the content settings with the MIME type 
-            content_settings = ContentSettings(content_type=mime_type)
-
+    def upload_blob(self, file: str, mime_type: str | None = None) -> str:
+        content_settings = ContentSettings(content_type=mime_type) if mime_type else None
         with open(file, "rb") as data:
-            blob_client = self.container_client.upload_blob(name=os.path.basename(file), data=data, overwrite=True, content_settings=content_settings)
-            # blob_client = self.container_client.upload_blob(name=os.path.basename(file), data=data, overwrite=True)
+            blob_client = self.container_client.upload_blob(
+                name=os.path.basename(file), data=data, overwrite=True, content_settings=content_settings
+            )
             return blob_client.url
 
-    def upload_blob_with_key(self, file, blob_key, mime_type=None):
-
-        content_settings = None
-        if mime_type:
-            # Define the content settings with the MIME type 
-            content_settings = ContentSettings(content_type=mime_type)
-
-        # Upload a blob to the container with a specified key
+    def upload_blob_with_key(self, file: str, blob_key: str, mime_type: str | None = None) -> str:
+        content_settings = ContentSettings(content_type=mime_type) if mime_type else None
         with open(file, "rb") as data:
-            blob_client = self.container_client.upload_blob(name=blob_key, data=data, overwrite=True, content_settings=content_settings)
-            # blob_client = self.container_client.upload_blob(name=blob_key, data=data, overwrite=True)
+            blob_client = self.container_client.upload_blob(
+                name=blob_key, data=data, overwrite=True, content_settings=content_settings
+            )
             return blob_client.url
 
-    def upload_blob_from_stream(self, stream, blob_key, mime_type=None):
-
-        content_settings = None
-        if mime_type:
-            # Define the content settings with the MIME type 
-            content_settings = ContentSettings(content_type=mime_type)
-
-        # Upload a blob to the container from a stream
-        blob_client = self.container_client.upload_blob(name=blob_key, data=stream, overwrite=True, content_settings=content_settings)
-        # blob_client = self.container_client.upload_blob(name=blob_key, data=stream, overwrite=True)
+    def upload_blob_from_stream(self, stream, blob_key: str, mime_type: str | None = None) -> str:
+        content_settings = ContentSettings(content_type=mime_type) if mime_type else None
+        blob_client = self.container_client.upload_blob(
+            name=blob_key, data=stream, overwrite=True, content_settings=content_settings
+        )
         return blob_client.url
 
-    def download_blob(self, blob_key, file_path):
-         with open(file_path, "wb") as blob_file:
-                download_stream = self.blob_client.download_blob()
-                blob_file.write(download_stream.readall())
+    def download_blob(self, blob_key: str, file_path: str) -> None:
+        blob_client = self.container_client.get_blob_client(blob_key)
+        with open(file_path, "wb") as blob_file:
+            download_stream = blob_client.download_blob()
+            blob_file.write(download_stream.readall())
 
     def list_blobs(self):
-        # List the blobs in the container
-        blob_list = self.container_client.list_blobs()
-        for blob in blob_list:
-            print(blob.name)
-        return blob_list
-    
-    def delete_blob(self, blob_key):
-        # Delete a blob
-        self.container_client.delete_blob(blob_key)
-        print(f"Blob {blob_key} deleted")
+        return self.container_client.list_blobs()
 
-    def generate_blob_sas_token(self, blob_key):
-        # Generate a SAS token for the blob and return the link
+    def delete_blob(self, blob_key: str) -> None:
+        self.container_client.delete_blob(blob_key)
+        logger.info("Blob %s deleted.", blob_key)
+
+    def generate_blob_sas_token(self, blob_key: str) -> str:
         blob_client = self.container_client.get_blob_client(blob_key)
+        now = datetime.now(timezone.utc)
         sas_token = generate_blob_sas(
             self.blob_service_client.account_name,
             container_name=self.container_client.container_name,
             blob_name=blob_client.blob_name,
-            user_delegation_key=self.blob_service_client.get_user_delegation_key(datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(hours=1)),
-            # account_key=self.blob_service_client.credential.account_key,
+            user_delegation_key=self.blob_service_client.get_user_delegation_key(now, now + timedelta(hours=1)),
             account_key=None,
             resource_types=ResourceTypes(object=True),
             permission=AccountSasPermissions(read=True),
-            expiry=datetime.now(timezone.utc) + timedelta(hours=1)
+            expiry=now + timedelta(hours=1),
         )
-
-        blob_url = blob_client.url
-        return f"{blob_url}?{sas_token}"
-    
-
+        return f"{blob_client.url}?{sas_token}"

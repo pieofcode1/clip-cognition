@@ -1,143 +1,117 @@
+"""Azure DocumentDB utility for CRUD and vector search operations."""
+
 import json
-from pymongo import MongoClient
+import logging
+from typing import Any
+
 from bson import json_util
+from pymongo import MongoClient
+
+logger = logging.getLogger(__name__)
 
 
-class CosmosMongoClient:
+class CosmosDocumentDBClient:
+    """Client wrapper for Azure DocumentDB with vector search support."""
 
-    def __init__ (self, altas_uri, dbname, embedding_agent=None):
-        self.mongodb_client = MongoClient(altas_uri)
-        self.database = self.mongodb_client[dbname]
+    def __init__(self, connection_uri: str, db_name: str, embedding_agent=None) -> None:
+        self.mongodb_client = MongoClient(connection_uri)
+        self.database = self.mongodb_client[db_name]
         self.embedding_agent = embedding_agent
 
-    ## A quick way to test if we can connect to Atlas instance
-    def ping (self):
-        self.mongodb_client.admin.command('ping')
+    def ping(self) -> None:
+        self.mongodb_client.admin.command("ping")
 
-    def list_databases(self):
-        databases = self.mongodb_client.list_database_names()
-        for db in databases:
-            print(f"Database: {db}")
-            # Get list of collections
-            collections = self.mongodb_client[db].list_collection_names()
-
-            # Loop through collections
-            for col in collections:
-                print(f"\tCollection: {col}")
-
-                # Get document count
-                doc_count = self.mongodb_client[db][col].count_documents({})
-                print(f"\tDocument count: {doc_count}")
-
-    def create_collection (self, collection_name):
+    def create_collection(self, collection_name: str) -> None:
         self.database.create_collection(collection_name)
 
-    def get_collection (self, collection_name):
-        collection = self.database[collection_name]
-        return collection
-    
-    def get_indices(self, collection_name):
-        return self.database[collection_name].getIndexes();
-    
-    def create_vector_index (self, collection_name, attr_name, index_name, type="vector-hnsw", num_lists=1, similarity="COS", dimensions=1536):
-        search_options = None
+    def get_collection(self, collection_name: str):
+        return self.database[collection_name]
 
-        # Support for HNSW indexes are available for M40 cluster tiers and higher 
-
-        if type == "vector-ivf":
+    def create_vector_index(
+        self,
+        collection_name: str,
+        attr_name: str,
+        index_name: str,
+        index_type: str = "vector-hnsw",
+        num_lists: int = 1,
+        similarity: str = "COS",
+        dimensions: int = 1536,
+    ) -> None:
+        if index_type == "vector-ivf":
             search_options = {
-                'kind': type,
-                'numLists': num_lists,
-                'similarity': similarity,
-                'dimensions': dimensions
+                "kind": index_type,
+                "numLists": num_lists,
+                "similarity": similarity,
+                "dimensions": dimensions,
             }
-        elif type == "vector-hnsw": 
+        elif index_type == "vector-hnsw":
             search_options = {
-                'kind': type,
-                'm': 64,
-                'efConstruction': 256,
-                'similarity': similarity,
-                'dimensions': dimensions
+                "kind": index_type,
+                "m": 64,
+                "efConstruction": 256,
+                "similarity": similarity,
+                "dimensions": dimensions,
             }
         else:
-            raise ValueError("Invalid index type. Supported types are 'vector-ivf' and 'vector-hnsw'")
+            raise ValueError(f"Invalid index type '{index_type}'. Supported: 'vector-ivf', 'vector-hnsw'")
 
-        # Create IVF index
         self.database.command({
-            'createIndexes': collection_name,
-            'indexes': [
-                    {
-                    'name': index_name,
-                    'key': {
-                        attr_name: "cosmosSearch"
-                    },
-                    'cosmosSearchOptions': search_options
-                }
-            ]
+            "createIndexes": collection_name,
+            "indexes": [{
+                "name": index_name,
+                "key": {attr_name: "cosmosSearch"},
+                "cosmosSearchOptions": search_options,
+            }],
         })
+        logger.info("Created %s index '%s' on %s.%s", index_type, index_name, collection_name, attr_name)
 
-    def parse_json(data):
-        return json.loads(json_util.dumps(data))
-
-    def insert(self, collection_name, data):
-        items = []
+    def insert(self, collection_name: str, data) -> None:
+        collection = self.database[collection_name]
         if isinstance(data, dict):
-            data = json.loads(json_util.dumps(data))
-            items.append(data)
+            items = [json.loads(json_util.dumps(data))]
         else:
-            for item in data:
-                item = json.loads(json_util.dumps(item))
-                items.append(item)
-
-        data = json.loads(json_util.dumps(data))
-        collection = self.database[collection_name]
+            items = [json.loads(json_util.dumps(item)) for item in data]
         collection.insert_many(items)
-            
 
-    def find (self, collection_name, filter = {}, limit=100):
+    def find(self, collection_name: str, filter: dict | None = None, limit: int = 100) -> list[dict[str, Any]]:
         collection = self.database[collection_name]
-        result = collection.find(filter=filter, limit=limit)
-        print(result)
-        items = []
-        for item in result:
-            items.append(item)
+        result = collection.find(filter=filter or {}, limit=limit)
+        return list(result)
 
-        return items
-
-
-    # https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-stage/
-    def perform_vector_search(self, collection_name, attr_name, prompt, projection: list = [], limit=3):
+    def perform_vector_search(
+        self,
+        collection_name: str,
+        attr_name: str,
+        prompt: str,
+        projection: list[str] | None = None,
+        limit: int = 3,
+    ) -> list[dict]:
         collection = self.database[collection_name]
         embedding_vector = self.embedding_agent.get_text_embeddings(prompt)
-        projected_fields = dict(similarityScore= { "$meta": 'searchScore' })
-        if len(projection) != 0:
+
+        projected_fields: dict = {"similarityScore": {"$meta": "searchScore"}}
+        if projection:
             for field in projection:
                 projected_fields[field] = 1
         else:
-            projected_fields["document"] = '$$ROOT'
-
-        print(f"Projected fields: {projected_fields}")
+            projected_fields["document"] = "$$ROOT"
 
         pipeline = [
-                {
-                    "$search": {
-                        "cosmosSearch": {
-                            "vector": embedding_vector,
-                            "path": attr_name,
-                            "k": limit, 
-                            "efsearch": 40 # optional for HNSW only 
-                            #"filter": {"title": {"$ne": "Azure Cosmos DB"}}
-                        },
-                        "returnStoredSource": True 
-                    }
-                },
-                {
-                    "$project": projected_fields
+            {
+                "$search": {
+                    "cosmosSearch": {
+                        "vector": embedding_vector,
+                        "path": attr_name,
+                        "k": limit,
+                        "efsearch": 40,
+                    },
+                    "returnStoredSource": True,
                 }
-            ]
+            },
+            {"$project": projected_fields},
+        ]
         results = collection.aggregate(pipeline)
         return list(results)
 
-
-    def close_connection(self):
+    def close_connection(self) -> None:
         self.mongodb_client.close()

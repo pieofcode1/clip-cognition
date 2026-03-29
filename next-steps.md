@@ -1,91 +1,158 @@
-# Next Steps after `azd init`
+# Next Steps
 
 ## Table of Contents
 
-1. [Next Steps](#next-steps)
-2. [What was added](#what-was-added)
-3. [Billing](#billing)
-4. [Troubleshooting](#troubleshooting)
+1. [Deployment](#deployment)
+2. [Post-Deployment](#post-deployment)
+3. [Local Development](#local-development)
+4. [CI/CD](#cicd)
+5. [Troubleshooting](#troubleshooting)
 
-## Next Steps
+## Deployment
 
-### Provision infrastructure and deploy application code
+### 1. Provision infrastructure
 
-Run `azd up` to provision your infrastructure and deploy to Azure (or run `azd provision` then `azd deploy` to accomplish the tasks separately). Visit the service endpoints listed to see your application up-and-running!
+```bash
+azd auth login
+azd up
+```
 
-To troubleshoot any issues, see [troubleshooting](#troubleshooting).
+This deploys all Azure resources **except** the Container Instance (no Docker image yet):
 
-### Configure environment variables for running services
+| Resource | Module |
+|---|---|
+| User-Assigned Managed Identity | `infra/app/identity.bicep` |
+| Azure OpenAI (GPT-4o, Whisper, Embeddings) | `infra/app/aoai.bicep` |
+| Cosmos DB NoSQL (database + 4 containers) | `infra/app/cosmosdb.bicep` |
+| Azure DocumentDB (MongoDB vCore cluster + firewall) | `infra/app/documentdb.bicep` |
+| Azure Storage (blob container) | `infra/app/storage.bicep` |
+| Azure Container Registry | `infra/app/container.bicep` |
+| RBAC role assignments | `infra/app/security.bicep` |
 
-Configure environment variables for running services by updating `settings` in [main.parameters.json](./infra/main.parameters.json).
+### 2. Set DocumentDB credentials
 
-### Configure CI/CD pipeline
+Before first deployment, set the admin password:
 
-1. Create a workflow pipeline file locally. The following starters are available:
+```bash
+azd env set AZURE_DOCUMENTDB_ADMIN_PASSWORD "YourStrongPassword123!"
+azd env set AZURE_DEVELOPER_IP_ADDRESS "your.public.ip"
+```
+
+### 3. Build & deploy the container
+
+```bash
+# Build the Docker image
+docker build -t clip-cognition-api .
+
+# Push to ACR
+az acr login --name $(azd env get-value AZURE_CONTAINER_REGISTRY_NAME)
+docker tag clip-cognition-api $(azd env get-value AZURE_CONTAINER_REGISTRY_LOGIN_SERVER)/clip-cognition-api:latest
+docker push $(azd env get-value AZURE_CONTAINER_REGISTRY_LOGIN_SERVER)/clip-cognition-api:latest
+
+# Enable ACI deployment & re-provision
+azd env set DEPLOY_CONTAINER_INSTANCE true
+azd up
+```
+
+## Post-Deployment
+
+After `azd up`, environment variables are automatically written to `.azure/dev/.env`. Key outputs:
+
+| Variable | Description |
+|---|---|
+| `MONGODB_CONNECTION_STRING` | DocumentDB connection string (credentials embedded) |
+| `MONGODB_DB_NAME` | DocumentDB database name |
+| `AZURE_COSMOS_DB_ENDPOINT` | Cosmos DB NoSQL endpoint |
+| `AZURE_DOCUMENTDB_CLUSTER_NAME` | DocumentDB cluster name |
+| `AZURE_CONTAINER_REGISTRY_LOGIN_SERVER` | ACR login server |
+
+The API `/health` endpoint reports backend availability:
+
+```json
+{
+  "status": "healthy",
+  "version": "0.1.0",
+  "backends": {
+    "cosmosdb_nosql": true,
+    "azure_documentdb": true
+  }
+}
+```
+
+## Local Development
+
+### Run the API
+
+```bash
+cd src
+uv run uvicorn api.main:app --reload
+```
+
+The API loads environment from `src/api/env/dev/.env`. After `azd up`, copy values from `.azure/dev/.env` or use `azd env get-values` to populate.
+
+### Run the Web App
+
+```bash
+cd src/webapp
+npm install
+npm run dev
+```
+
+The webapp will be available at `http://localhost:3000`.
+
+### Environment variable flow
+
+```
+azd env (input)  →  main.parameters.json  →  main.bicep  →  .azure/dev/.env (output)
+                                                           →  ACI env vars (in Azure)
+```
+
+- **Input params**: `AZURE_DOCUMENTDB_ADMIN_LOGIN`, `AZURE_DOCUMENTDB_ADMIN_PASSWORD`, `AZURE_DEVELOPER_IP_ADDRESS`
+- **Outputs**: All `AZURE_*`, `MONGODB_*`, `USER_ASSIGNED_*` variables
+
+For local development, `src/api/env/dev/.env` should mirror the relevant values from `.azure/dev/.env`.
+
+## CI/CD
+
+### Configure pipeline
+
+1. Create a workflow pipeline file:
    - [Deploy with GitHub Actions](https://github.com/Azure-Samples/azd-starter-bicep/blob/main/.github/workflows/azure-dev.yml)
    - [Deploy with Azure Pipelines](https://github.com/Azure-Samples/azd-starter-bicep/blob/main/.azdo/pipelines/azure-dev.yml)
 2. Run `azd pipeline config` to configure the deployment pipeline to connect securely to Azure.
 
-## What was added
-
-### Infrastructure configuration
-
-To describe the infrastructure and application, `azure.yaml` along with Infrastructure as Code files using Bicep were added with the following directory structure:
-
-```yaml
-- azure.yaml        # azd project configuration
-- infra/            # Infrastructure-as-code Bicep files
-  - main.bicep      # Subscription level resources
-  - resources.bicep # Primary resource group resources
-  - modules/        # Library modules
-```
-
-The resources declared in [resources.bicep](./infra/resources.bicep) are provisioned when running `azd up` or `azd provision`.
-This includes:
-
-
-- Azure Container App to host the 'src' service.
-
-More information about [Bicep](https://aka.ms/bicep) language.
-
-### Build from source (no Dockerfile)
-
-#### Build with Buildpacks using Oryx
-
-If your project does not contain a Dockerfile, we will use [Buildpacks](https://buildpacks.io/) using [Oryx](https://github.com/microsoft/Oryx/blob/main/doc/README.md) to create an image for the services in `azure.yaml` and get your containerized app onto Azure.
-
-To produce and run the docker image locally:
-
-1. Run `azd package` to build the image.
-2. Copy the *Image Tag* shown.
-3. Run `docker run -it <Image Tag>` to run the image locally.
-
-#### Exposed port
-
-Oryx will automatically set `PORT` to a default value of `80` (port `8080` for Java). Additionally, it will auto-configure supported web servers such as `gunicorn` and `ASP .NET Core` to listen to the target `PORT`. If your application already listens to the port specified by the `PORT` variable, the application will work out-of-the-box. Otherwise, you may need to perform one of the steps below:
-
-1. Update your application code or configuration to listen to the port specified by the `PORT` variable
-1. (Alternatively) Search for `targetPort` in a .bicep file under the `infra/app` folder, and update the variable to match the port used by the application.
-
-## Billing
-
-Visit the *Cost Management + Billing* page in Azure Portal to track current spend. For more information about how you're billed, and how you can monitor the costs incurred in your Azure subscriptions, visit [billing overview](https://learn.microsoft.com/azure/developer/intro/azure-developer-billing).
-
 ## Troubleshooting
 
-Q: I visited the service endpoint listed, and I'm seeing a blank page, a generic welcome page, or an error page.
+### DocumentDB connection fails
 
-A: Your service may have failed to start, or it may be missing some configuration settings. To investigate further:
+- Verify your public IP is in the firewall: `azd env set AZURE_DEVELOPER_IP_ADDRESS "your.ip"` then `azd up`
+- Confirm `MONGODB_CONNECTION_STRING` does not contain `<user>` or `<password>` placeholders
+- Check the cluster exists: `az resource list -g <rg> --resource-type Microsoft.DocumentDB/mongoClusters -o table`
 
-1. Run `azd show`. Click on the link under "View in Azure Portal" to open the resource group in Azure Portal.
-2. Navigate to the specific Container App service that is failing to deploy.
-3. Click on the failing revision under "Revisions with Issues".
-4. Review "Status details" for more information about the type of failure.
-5. Observe the log outputs from Console log stream and System log stream to identify any errors.
-6. If logs are written to disk, use *Console* in the navigation to connect to a shell within the running container.
+### Cosmos DB returns 403
 
-For more troubleshooting information, visit [Container Apps troubleshooting](https://learn.microsoft.com/azure/container-apps/troubleshooting). 
+- Ensure your IP is allowed in Cosmos DB Networking (Azure Portal)
+- Verify RBAC role assignments completed: check `infra/app/security.bicep` SQL role definitions
 
-### Additional information
+### ACI fails with InaccessibleImage
 
-For additional information about setting up your `azd` project, visit our official [docs](https://learn.microsoft.com/azure/developer/azure-developer-cli/make-azd-compatible?pivots=azd-convert).
+- The Docker image must be pushed to ACR before enabling ACI
+- Set `DEPLOY_CONTAINER_INSTANCE` to `false` (default) for initial infra provisioning
+- Push the image, then set to `true` and re-run `azd up`
+
+### MFA token expired
+
+```bash
+azd auth logout
+az logout
+az login --tenant <tenant-id>
+azd auth login --tenant-id <tenant-id>
+```
+
+### Billing
+
+Visit *Cost Management + Billing* in Azure Portal. Key cost drivers:
+- Azure OpenAI (token consumption)
+- DocumentDB M40 cluster (compute + storage)
+- Cosmos DB NoSQL (RU consumption)
+- Azure Container Instances (vCPU + memory hours)

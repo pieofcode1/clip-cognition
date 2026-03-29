@@ -1,12 +1,10 @@
 python-dotenv
 openai
 requests
-streamlit
 pymongo
 tenacity
 tiktoken
 azure-identity
-streamlit-agraph
 gremlinpython
 azure-storage-blob
 azure-cosmos

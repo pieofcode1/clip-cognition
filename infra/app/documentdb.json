@@ -1,0 +1,622 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "4577051637036599557"
+    },
+    "description": "Creates an Azure DocumentDB cluster for vector search with managed identity RBAC."
+  },
+  "parameters": {
+    "clusterName": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {}
+    },
+    "administratorLogin": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Administrator login name."
+      }
+    },
+    "administratorLoginPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Administrator login password."
+      }
+    },
+    "sku": {
+      "type": "string",
+      "defaultValue": "M40",
+      "allowedValues": [
+        "Free",
+        "M25",
+        "M30",
+        "M40",
+        "M50",
+        "M60",
+        "M80"
+      ],
+      "metadata": {
+        "description": "The compute tier. Defaults to M40."
+      }
+    },
+    "storageSizeGb": {
+      "type": "int",
+      "defaultValue": 128,
+      "metadata": {
+        "description": "Storage size in GB per shard."
+      }
+    },
+    "allowAzureAccess": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Allow access from all Azure services."
+      }
+    },
+    "developerIpAddress": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Developer public IP address for firewall access. Empty to skip."
+      }
+    },
+    "appPrincipalId": {
+      "type": "string",
+      "metadata": {
+        "description": "Principal ID of the user-assigned managed identity for RBAC."
+      }
+    },
+    "userPrincipalId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Principal ID of the deploying user for RBAC."
+      }
+    },
+    "principalType": {
+      "type": "string",
+      "defaultValue": "User",
+      "metadata": {
+        "description": "Type of the user principal."
+      }
+    }
+  },
+  "variables": {
+    "databaseName": "clip-cognition-db",
+    "contributorRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "documentdb-cluster",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[parameters('clusterName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "administratorLogin": {
+            "value": "[parameters('administratorLogin')]"
+          },
+          "administratorLoginPassword": {
+            "value": "[parameters('administratorLoginPassword')]"
+          },
+          "sku": {
+            "value": "[parameters('sku')]"
+          },
+          "storageSizeGb": {
+            "value": "[parameters('storageSizeGb')]"
+          },
+          "shardCount": {
+            "value": 1
+          },
+          "enableHa": {
+            "value": false
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "7335779183806354841"
+            },
+            "description": "Creates an Azure DocumentDB (Cosmos DB for MongoDB vCore) cluster."
+          },
+          "parameters": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]"
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {}
+            },
+            "administratorLogin": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Administrator login name."
+              }
+            },
+            "administratorLoginPassword": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Administrator login password."
+              }
+            },
+            "serverVersion": {
+              "type": "string",
+              "defaultValue": "7.0",
+              "metadata": {
+                "description": "MongoDB server version."
+              }
+            },
+            "sku": {
+              "type": "string",
+              "defaultValue": "M40",
+              "allowedValues": [
+                "Free",
+                "M25",
+                "M30",
+                "M40",
+                "M50",
+                "M60",
+                "M80"
+              ],
+              "metadata": {
+                "description": "The compute tier and size."
+              }
+            },
+            "storageSizeGb": {
+              "type": "int",
+              "defaultValue": 128,
+              "metadata": {
+                "description": "Storage size in GB per shard."
+              }
+            },
+            "shardCount": {
+              "type": "int",
+              "defaultValue": 1,
+              "metadata": {
+                "description": "Number of shards in the cluster."
+              }
+            },
+            "enableHa": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Enable high availability. Defaults to false."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.DocumentDB/mongoClusters",
+              "apiVersion": "2024-07-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "administrator": {
+                  "userName": "[parameters('administratorLogin')]",
+                  "password": "[parameters('administratorLoginPassword')]"
+                },
+                "serverVersion": "[parameters('serverVersion')]",
+                "compute": {
+                  "tier": "[parameters('sku')]"
+                },
+                "storage": {
+                  "sizeGb": "[parameters('storageSizeGb')]"
+                },
+                "sharding": {
+                  "shardCount": "[parameters('shardCount')]"
+                },
+                "highAvailability": {
+                  "targetMode": "[if(parameters('enableHa'), 'SameZone', 'Disabled')]"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "connectionString": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.DocumentDB/mongoClusters', parameters('name')), '2024-07-01').connectionString]"
+            },
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.DocumentDB/mongoClusters', parameters('name'))]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "condition": "[parameters('allowAzureAccess')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "documentdb-allow-azure",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "clusterName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'documentdb-cluster'), '2025-04-01').outputs.name.value]"
+          },
+          "ruleName": {
+            "value": "AllowAllAzureServices"
+          },
+          "startIpAddress": {
+            "value": "0.0.0.0"
+          },
+          "endIpAddress": {
+            "value": "0.0.0.0"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "17988601586192781077"
+            },
+            "description": "Creates a firewall rule for an Azure DocumentDB cluster."
+          },
+          "parameters": {
+            "clusterName": {
+              "type": "string"
+            },
+            "ruleName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the firewall rule."
+              }
+            },
+            "startIpAddress": {
+              "type": "string",
+              "metadata": {
+                "description": "Start IP address of the allowed range."
+              }
+            },
+            "endIpAddress": {
+              "type": "string",
+              "metadata": {
+                "description": "End IP address of the allowed range."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.DocumentDB/mongoClusters/firewallRules",
+              "apiVersion": "2024-07-01",
+              "name": "[format('{0}/{1}', parameters('clusterName'), parameters('ruleName'))]",
+              "properties": {
+                "startIpAddress": "[parameters('startIpAddress')]",
+                "endIpAddress": "[parameters('endIpAddress')]"
+              }
+            }
+          ],
+          "outputs": {
+            "name": {
+              "type": "string",
+              "value": "[parameters('ruleName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'documentdb-cluster')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "documentdb-role-app",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "clusterName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'documentdb-cluster'), '2025-04-01').outputs.name.value]"
+          },
+          "principalId": {
+            "value": "[parameters('appPrincipalId')]"
+          },
+          "principalType": {
+            "value": "ServicePrincipal"
+          },
+          "roleDefinitionId": {
+            "value": "[variables('contributorRoleId')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "1669347327086866169"
+            },
+            "description": "Creates an Azure RBAC role assignment scoped to a DocumentDB cluster."
+          },
+          "parameters": {
+            "clusterName": {
+              "type": "string",
+              "metadata": {
+                "description": "The name of the DocumentDB cluster."
+              }
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "The principal ID to assign the role to."
+              }
+            },
+            "principalType": {
+              "type": "string",
+              "defaultValue": "ServicePrincipal",
+              "allowedValues": [
+                "ServicePrincipal",
+                "User",
+                "Group"
+              ],
+              "metadata": {
+                "description": "The type of the principal."
+              }
+            },
+            "roleDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "The built-in role definition ID to assign."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.DocumentDB/mongoClusters', parameters('clusterName'))]",
+              "name": "[guid(subscription().id, resourceGroup().id, parameters('clusterName'), parameters('principalId'), parameters('roleDefinitionId'))]",
+              "properties": {
+                "principalId": "[parameters('principalId')]",
+                "principalType": "[parameters('principalType')]",
+                "roleDefinitionId": "[parameters('roleDefinitionId')]"
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[extensionResourceId(resourceId('Microsoft.DocumentDB/mongoClusters', parameters('clusterName')), 'Microsoft.Authorization/roleAssignments', guid(subscription().id, resourceGroup().id, parameters('clusterName'), parameters('principalId'), parameters('roleDefinitionId')))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'documentdb-cluster')]"
+      ]
+    },
+    {
+      "condition": "[not(empty(parameters('developerIpAddress')))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "documentdb-allow-dev-ip",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "clusterName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'documentdb-cluster'), '2025-04-01').outputs.name.value]"
+          },
+          "ruleName": {
+            "value": "AllowDeveloperIP"
+          },
+          "startIpAddress": {
+            "value": "[parameters('developerIpAddress')]"
+          },
+          "endIpAddress": {
+            "value": "[parameters('developerIpAddress')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "17988601586192781077"
+            },
+            "description": "Creates a firewall rule for an Azure DocumentDB cluster."
+          },
+          "parameters": {
+            "clusterName": {
+              "type": "string"
+            },
+            "ruleName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the firewall rule."
+              }
+            },
+            "startIpAddress": {
+              "type": "string",
+              "metadata": {
+                "description": "Start IP address of the allowed range."
+              }
+            },
+            "endIpAddress": {
+              "type": "string",
+              "metadata": {
+                "description": "End IP address of the allowed range."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.DocumentDB/mongoClusters/firewallRules",
+              "apiVersion": "2024-07-01",
+              "name": "[format('{0}/{1}', parameters('clusterName'), parameters('ruleName'))]",
+              "properties": {
+                "startIpAddress": "[parameters('startIpAddress')]",
+                "endIpAddress": "[parameters('endIpAddress')]"
+              }
+            }
+          ],
+          "outputs": {
+            "name": {
+              "type": "string",
+              "value": "[parameters('ruleName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'documentdb-cluster')]"
+      ]
+    },
+    {
+      "condition": "[not(empty(parameters('userPrincipalId')))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "documentdb-role-user",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "clusterName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'documentdb-cluster'), '2025-04-01').outputs.name.value]"
+          },
+          "principalId": {
+            "value": "[parameters('userPrincipalId')]"
+          },
+          "principalType": {
+            "value": "[parameters('principalType')]"
+          },
+          "roleDefinitionId": {
+            "value": "[variables('contributorRoleId')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "1669347327086866169"
+            },
+            "description": "Creates an Azure RBAC role assignment scoped to a DocumentDB cluster."
+          },
+          "parameters": {
+            "clusterName": {
+              "type": "string",
+              "metadata": {
+                "description": "The name of the DocumentDB cluster."
+              }
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "The principal ID to assign the role to."
+              }
+            },
+            "principalType": {
+              "type": "string",
+              "defaultValue": "ServicePrincipal",
+              "allowedValues": [
+                "ServicePrincipal",
+                "User",
+                "Group"
+              ],
+              "metadata": {
+                "description": "The type of the principal."
+              }
+            },
+            "roleDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "The built-in role definition ID to assign."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.DocumentDB/mongoClusters', parameters('clusterName'))]",
+              "name": "[guid(subscription().id, resourceGroup().id, parameters('clusterName'), parameters('principalId'), parameters('roleDefinitionId'))]",
+              "properties": {
+                "principalId": "[parameters('principalId')]",
+                "principalType": "[parameters('principalType')]",
+                "roleDefinitionId": "[parameters('roleDefinitionId')]"
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[extensionResourceId(resourceId('Microsoft.DocumentDB/mongoClusters', parameters('clusterName')), 'Microsoft.Authorization/roleAssignments', guid(subscription().id, resourceGroup().id, parameters('clusterName'), parameters('principalId'), parameters('roleDefinitionId')))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'documentdb-cluster')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "clusterName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'documentdb-cluster'), '2025-04-01').outputs.name.value]"
+    },
+    "connectionString": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'documentdb-cluster'), '2025-04-01').outputs.connectionString.value]"
+    },
+    "databaseName": {
+      "type": "string",
+      "value": "[variables('databaseName')]"
+    }
+  }
+}

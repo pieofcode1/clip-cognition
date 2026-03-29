@@ -6,5 +6,8 @@
     "openAiAccount": "openai",
     "userAssignedIdentity": "ua-id",
     "appServiceWebApp": "web",
-    "appServicePlan": "plan"
+    "appServicePlan": "plan",
+    "containerRegistry": "acr",
+    "containerInstance": "aci",
+    "documentDbCluster": "docdb"
 }
