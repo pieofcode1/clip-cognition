@@ -58,6 +58,7 @@ class SearchResponse(BaseModel):
     results: list[SearchResultItem]
     video_url: str | None = None
     asset_info: dict | None = None
+    playback_offset: float | None = None
 
 
 class BlobItem(BaseModel):
