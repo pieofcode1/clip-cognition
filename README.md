@@ -18,6 +18,14 @@ Capabilities:
 
 ## Architecture
 
+### Cosmos DB
+
+![Media RAG with Cosmos DB](media/arch_cosmosdb.png)
+
+### DocumentDB
+
+![Media RAG with DocumentDB](media/arch_docdb.png)
+
 | Component | Azure Service |
 |---|---|
 | API runtime | Azure Container Instances (Docker) |

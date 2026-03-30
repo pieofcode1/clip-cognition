@@ -151,7 +151,7 @@ export default function HomePage() {
                       className={`nav-link ${archTab === "media" ? "active" : ""}`}
                       onClick={() => setArchTab("media")}
                     >
-                      Media Pipeline
+                      Cosmos DB
                     </button>
                   </li>
                   <li className="nav-item">
@@ -159,15 +159,15 @@ export default function HomePage() {
                       className={`nav-link ${archTab === "data" ? "active" : ""}`}
                       onClick={() => setArchTab("data")}
                     >
-                      Data Platform
+                      DocumentDB
                     </button>
                   </li>
                 </ul>
               </div>
               <div className="card-body text-center p-4">
                 <Image
-                  src={archTab === "media" ? "/media_arch.png" : "/arch_cosmos.png"}
-                  alt={archTab === "media" ? "Media RAG in Azure" : "RAG in Azure (Cosmos DB)"}
+                  src={archTab === "media" ? "/arch_cosmosdb.png" : "/arch_docdb.png"}
+                  alt={archTab === "media" ? "Media RAG with Cosmos DB" : "Media RAG with DocumentDB"}
                   width={800}
                   height={500}
                   className="img-fluid rounded"
