@@ -7,7 +7,7 @@ import { useSettings } from "@/lib/settings-context";
 
 export default function HomePage() {
   const { health, mounted } = useSettings();
-  const [archTab, setArchTab] = useState<"media" | "data">("media");
+  const [archTab, setArchTab] = useState<"media" | "data">("data");
 
   return (
     <>
@@ -104,11 +104,11 @@ export default function HomePage() {
               </li>
               <li>
                 <i className="bi bi-database text-primary me-2"></i>
-                <strong>Cosmos DB NoSQL</strong>{" \u2014 Operational + vector store"}
+                <strong>CosmosDB</strong>{" \u2014 Operational + vector store"}
               </li>
               <li>
                 <i className="bi bi-hdd-stack text-primary me-2"></i>
-                <strong>Azure DocumentDB</strong>{" \u2014 MongoDB-compatible vectors"}
+                <strong>DocumentDB</strong>{" \u2014 MongoDB-compatible vectors"}
               </li>
               <li>
                 <i className="bi bi-cloud text-primary me-2"></i>
@@ -131,7 +131,7 @@ export default function HomePage() {
                 <div className="d-flex gap-4">
                   <span className="backend-indicator">
                     <span className={`dot ${health.backends.cosmosdb_nosql ? "healthy" : "unhealthy"}`}></span>
-                    Cosmos NoSQL
+                    CosmosDB
                   </span>
                   <span className="backend-indicator">
                     <span className={`dot ${health.backends.azure_documentdb ? "healthy" : "unhealthy"}`}></span>
@@ -148,18 +148,18 @@ export default function HomePage() {
                 <ul className="nav nav-tabs card-header-tabs">
                   <li className="nav-item">
                     <button
-                      className={`nav-link ${archTab === "media" ? "active" : ""}`}
-                      onClick={() => setArchTab("media")}
-                    >
-                      Cosmos DB
-                    </button>
-                  </li>
-                  <li className="nav-item">
-                    <button
                       className={`nav-link ${archTab === "data" ? "active" : ""}`}
                       onClick={() => setArchTab("data")}
                     >
                       DocumentDB
+                    </button>
+                  </li>
+                  <li className="nav-item">
+                    <button
+                      className={`nav-link ${archTab === "media" ? "active" : ""}`}
+                      onClick={() => setArchTab("media")}
+                    >
+                      Cosmos DB
                     </button>
                   </li>
                 </ul>

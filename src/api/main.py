@@ -40,10 +40,10 @@ def health():
     """Health check — runs in a thread pool so blocking DB probes don't stall the event loop."""
     backends = {"cosmosdb_nosql": False, "azure_documentdb": False}
 
-    # Check Cosmos DB NoSQL
+    # Check CosmosDB
     try:
         from api.dependencies import get_search_agent
-        get_search_agent("CosmosDB NoSQL")
+        get_search_agent("CosmosDB")
         backends["cosmosdb_nosql"] = True
     except Exception:
         pass
