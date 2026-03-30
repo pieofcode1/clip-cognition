@@ -47,6 +47,7 @@ def vector_search(body: SearchRequest):
     # Fetch video asset info for the top result
     video_url: str | None = None
     asset_info: dict | None = None
+    playback_offset: float | None = None
     top_asset_name = results[0].asset_name
     if top_asset_name:
         assets_container = os.environ["AZURE_COSMOS_DB_VIDEO_ASSETS_CONTAINER_NAME"]
@@ -61,9 +62,16 @@ def vector_search(body: SearchRequest):
             }
             asset_info = {k: v for k, v in asset_list[0].items() if k not in keys_to_remove}
 
+            # Calculate playback offset for the top matching frame
+            top_frame_id = results[0].frame_id
+            frame_offset = asset_list[0].get("frame_offset")
+            if top_frame_id is not None and frame_offset:
+                playback_offset = float(top_frame_id * frame_offset)
+
     return SearchResponse(
         query=body.query,
         results=results,
         video_url=video_url,
         asset_info=asset_info,
+        playback_offset=playback_offset,
     )

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSettings } from "@/lib/settings-context";
 import { vectorSearch } from "@/lib/api";
 import type { SearchResponse } from "@/lib/types";
@@ -13,12 +13,15 @@ export default function SearchPage() {
   const [searching, setSearching] = useState(false);
   const [result, setResult] = useState<SearchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"video" | "frames">("video");
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
     setSearching(true);
     setError(null);
+    setActiveTab("video");
     try {
       const res = await vectorSearch(query, vectorStoreType, limit);
       setResult(res);
@@ -28,6 +31,17 @@ export default function SearchPage() {
       setSearching(false);
     }
   };
+
+  // Seek to playback offset when video is ready
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || result?.playback_offset == null) return;
+    const seekToOffset = () => {
+      video.currentTime = result.playback_offset!;
+    };
+    video.addEventListener("loadedmetadata", seekToOffset);
+    return () => video.removeEventListener("loadedmetadata", seekToOffset);
+  }, [result?.video_url, result?.playback_offset]);
 
   return (
     <>
@@ -88,97 +102,195 @@ export default function SearchPage() {
       {error && <div className="alert alert-danger">{error}</div>}
 
       {/* Results */}
-      {result && (
-        <div className="row">
-          {/* Left: result list */}
-          <div className={result.video_url || result.asset_info ? "col-lg-7" : "col-12"}>
-            {result.results.length === 0 ? (
-              <div className="text-center py-5 text-muted">
-                <i className="bi bi-search fs-1"></i>
-                <p className="mt-2">No matching results for &ldquo;{result.query}&rdquo;</p>
-              </div>
-            ) : (
-              <div className="d-flex flex-column gap-3">
-                <p className="text-muted small mb-0">
-                  {result.results.length} result{result.results.length !== 1 ? "s" : ""} for &ldquo;{result.query}&rdquo;
-                </p>
-                {result.results.map((r, i) => (
-                  <div key={i} className="card search-result-card">
-                    <div className="card-body">
-                      <div className="d-flex justify-content-between align-items-start mb-1">
-                        <h6 className="mb-0">
-                          <i className="bi bi-film me-1 text-muted"></i>
-                          {r.asset_name}
-                          {r.frame_id !== null && (
-                            <span className="text-muted ms-2 small">Frame {r.frame_id}</span>
-                          )}
-                        </h6>
-                        {r.similarity_score !== null && (
-                          <span
-                            className={`badge similarity-badge ${
-                              r.similarity_score >= 0.8
-                                ? "bg-success"
-                                : r.similarity_score >= 0.6
-                                ? "bg-warning text-dark"
-                                : "bg-secondary"
-                            }`}
-                          >
-                            {(r.similarity_score * 100).toFixed(1)}% match
-                          </span>
-                        )}
+      {result && result.results.length > 0 && (
+        <>
+          <p className="text-muted small mb-3">
+            {result.results.length} result{result.results.length !== 1 ? "s" : ""} for &ldquo;{result.query}&rdquo;
+          </p>
+
+          {/* Tabs */}
+          <ul className="nav nav-tabs mb-3">
+            <li className="nav-item">
+              <button
+                className={`nav-link ${activeTab === "video" ? "active" : ""}`}
+                onClick={() => setActiveTab("video")}
+              >
+                <i className="bi bi-play-circle me-1"></i> Video Playback
+              </button>
+            </li>
+            <li className="nav-item">
+              <button
+                className={`nav-link ${activeTab === "frames" ? "active" : ""}`}
+                onClick={() => setActiveTab("frames")}
+              >
+                <i className="bi bi-grid-3x2-gap me-1"></i> Matching Frames
+                <span className="badge bg-secondary ms-1">{result.results.length}</span>
+              </button>
+            </li>
+          </ul>
+
+          {/* Tab 1: Video Playback */}
+          {activeTab === "video" && (
+            <div className="row">
+              <div className="col-lg-8">
+                {result.video_url ? (
+                  <div className="card">
+                    <div className="card-body p-2">
+                      <video
+                        ref={videoRef}
+                        className="video-player w-100"
+                        controls
+                        src={result.video_url}
+                      />
+                    </div>
+                    {result.playback_offset != null && (
+                      <div className="card-footer bg-white small text-muted">
+                        <i className="bi bi-skip-forward me-1"></i>
+                        Playing from {formatTimestamp(result.playback_offset)} &mdash; closest match at Frame {result.results[0].frame_id}
                       </div>
-                      <div className="mb-0 small text-muted"><ReactMarkdown>{r.summary}</ReactMarkdown></div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="card">
+                    <div className="card-body text-center py-5 text-muted">
+                      <i className="bi bi-camera-video-off fs-1"></i>
+                      <p className="mt-2 mb-0">Video not available for this asset</p>
                     </div>
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </div>
 
-          {/* Right: top video context */}
-          {(result.video_url || result.asset_info) && (
-            <div className="col-lg-5">
-              <div className="card">
-                <div className="card-header bg-white">
-                  <h6 className="mb-0">
-                    <i className="bi bi-play-circle me-1"></i> Top Match Context
-                  </h6>
+              <div className="col-lg-4">
+                {/* Top match info */}
+                <div className="card mb-3">
+                  <div className="card-header bg-white">
+                    <h6 className="mb-0">
+                      <i className="bi bi-bullseye me-1"></i> Top Match
+                    </h6>
+                  </div>
+                  <div className="card-body">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <span className="fw-semibold small">{result.results[0].asset_name}</span>
+                      {result.results[0].similarity_score != null && (
+                        <span
+                          className={`badge ${
+                            result.results[0].similarity_score >= 0.8
+                              ? "bg-success"
+                              : result.results[0].similarity_score >= 0.6
+                              ? "bg-warning text-dark"
+                              : "bg-secondary"
+                          }`}
+                        >
+                          {(result.results[0].similarity_score * 100).toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
+                    {result.results[0].frame_id != null && (
+                      <p className="small text-muted mb-2">
+                        <i className="bi bi-film me-1"></i> Frame {result.results[0].frame_id}
+                        {result.playback_offset != null && (
+                          <> &middot; {formatTimestamp(result.playback_offset)}</>
+                        )}
+                      </p>
+                    )}
+                    <div className="small"><ReactMarkdown>{result.results[0].summary}</ReactMarkdown></div>
+                  </div>
                 </div>
-                <div className="card-body">
-                  {result.video_url && (
-                    <video className="video-player w-100 mb-3" controls src={result.video_url} />
-                  )}
-                  {result.asset_info && (() => {
-                    const info = result.asset_info as Record<string, string | number | null>;
-                    return (
-                      <dl className="row mb-0 small">
-                        {info.asset_name && (
-                          <>
-                            <dt className="col-sm-4 text-muted">Asset</dt>
-                            <dd className="col-sm-8">{String(info.asset_name)}</dd>
-                          </>
-                        )}
-                        {info.frame_count && (
-                          <>
-                            <dt className="col-sm-4 text-muted">Frames</dt>
-                            <dd className="col-sm-8">{String(info.frame_count)}</dd>
-                          </>
-                        )}
+
+                {/* Asset info */}
+                {result.asset_info && (() => {
+                  const info = result.asset_info as Record<string, string | number | null>;
+                  return (
+                    <div className="card">
+                      <div className="card-header bg-white">
+                        <h6 className="mb-0">
+                          <i className="bi bi-info-circle me-1"></i> Asset Info
+                        </h6>
+                      </div>
+                      <div className="card-body">
+                        <dl className="row mb-0 small">
+                          {info.frame_count != null && (
+                            <>
+                              <dt className="col-sm-5 text-muted">Frames</dt>
+                              <dd className="col-sm-7">{String(info.frame_count)}</dd>
+                            </>
+                          )}
+                          {info.duration != null && (
+                            <>
+                              <dt className="col-sm-5 text-muted">Duration</dt>
+                              <dd className="col-sm-7">{formatTimestamp(Number(info.duration))}</dd>
+                            </>
+                          )}
+                          {info.frame_offset != null && (
+                            <>
+                              <dt className="col-sm-5 text-muted">Frame interval</dt>
+                              <dd className="col-sm-7">{String(info.frame_offset)}s</dd>
+                            </>
+                          )}
+                        </dl>
                         {info.video_summary && (
-                          <>
-                            <dt className="col-sm-4 text-muted">Summary</dt>
-                            <dd className="col-sm-8"><ReactMarkdown>{String(info.video_summary)}</ReactMarkdown></dd>
-                          </>
+                          <div className="mt-2 pt-2 border-top small">
+                            <ReactMarkdown>{String(info.video_summary)}</ReactMarkdown>
+                          </div>
                         )}
-                      </dl>
-                    );
-                  })()}
-                </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
+
+          {/* Tab 2: Matching Frames */}
+          {activeTab === "frames" && (
+            <div className="d-flex flex-column gap-3">
+              {result.results.map((r, i) => (
+                <div key={i} className="card search-result-card">
+                  <div className="card-body">
+                    <div className="d-flex justify-content-between align-items-start mb-1">
+                      <h6 className="mb-0">
+                        <i className="bi bi-film me-1 text-muted"></i>
+                        {r.asset_name}
+                        {r.frame_id != null && (
+                          <span className="text-muted ms-2 small">Frame {r.frame_id}</span>
+                        )}
+                      </h6>
+                      {r.similarity_score != null && (
+                        <span
+                          className={`badge ${
+                            r.similarity_score >= 0.8
+                              ? "bg-success"
+                              : r.similarity_score >= 0.6
+                              ? "bg-warning text-dark"
+                              : "bg-secondary"
+                          }`}
+                        >
+                          {(r.similarity_score * 100).toFixed(1)}% match
+                        </span>
+                      )}
+                    </div>
+                    <div className="mb-0 small text-muted"><ReactMarkdown>{r.summary}</ReactMarkdown></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* No results */}
+      {result && result.results.length === 0 && (
+        <div className="text-center py-5 text-muted">
+          <i className="bi bi-search fs-1"></i>
+          <p className="mt-2">No matching results for &ldquo;{result.query}&rdquo;</p>
         </div>
       )}
     </>
   );
+}
+
+function formatTimestamp(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
