@@ -66,7 +66,7 @@ class VideoProcessingAgent:
 
     def _init_vector_store(self, vector_store_type: str) -> None:
         if vector_store_type == VectorStoreType.CosmosNoSQL.value or vector_store_type == VectorStoreType.CosmosNoSQL:
-            logger.info("Initializing CosmosDB NoSQL as vector store")
+            logger.info("Initializing CosmosDB as vector store")
             self.cosmos_util = CosmosUtil(
                 database=os.environ["AZURE_COSMOS_DB_DATABASE_NAME"],
                 containers=[
@@ -76,7 +76,7 @@ class VideoProcessingAgent:
                 embedding_agent=AzureOpenAIEmbeddingsAgent(),
             )
         elif vector_store_type == VectorStoreType.AzureDocumentDB.value or vector_store_type == VectorStoreType.AzureDocumentDB:
-            logger.info("Initializing Azure DocumentDB as vector store")
+            logger.info("Initializing DocumentDB as vector store")
             conn_str = os.environ.get("MONGODB_CONNECTION_STRING", "")
             if not conn_str or "<user>" in conn_str or "<password>" in conn_str:
                 raise ValueError(

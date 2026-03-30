@@ -18,6 +18,14 @@ Capabilities:
 
 ## Architecture
 
+### Cosmos DB
+
+![Media RAG with Cosmos DB](media/arch_cosmosdb.png)
+
+### DocumentDB
+
+![Media RAG with DocumentDB](media/arch_docdb.png)
+
 | Component | Azure Service |
 |---|---|
 | API runtime | Azure Container Instances (Docker) |
@@ -181,16 +189,16 @@ azure.yaml                       # azd project configuration
 | `GET` | `/assets/frames/{blob_key}/url` | Generate SAS URL for a frame image |
 | `GET` | `/assets/blobs` | List all blobs in the storage container |
 
-All endpoints that query the database accept a `vector_store_type` parameter (`CosmosDB NoSQL` or `Azure DocumentDB`) to choose the backend.
+All endpoints that query the database accept a `vector_store_type` parameter (`CosmosDB` or `DocumentDB`) to choose the backend.
 
 ## Vector Store Backends
 
-### Cosmos DB NoSQL
+### CosmosDB
 - Uses native [vector search](https://learn.microsoft.com/azure/cosmos-db/nosql/vector-search) with `quantizedFlat` indexes
 - Authentication via managed identity (RBAC, no keys)
 - Data plane access through the Cosmos DB SDK
 
-### Azure DocumentDB (MongoDB vCore)
+### DocumentDB (MongoDB vCore)
 - Uses [HNSW or IVF vector indexes](https://learn.microsoft.com/azure/cosmos-db/mongodb/vcore/vector-search) via the MongoDB wire protocol
 - Authentication via connection string (username/password)
 - Control plane RBAC via managed identity (Contributor role)

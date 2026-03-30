@@ -68,7 +68,7 @@ export default function DashboardPage() {
               <div className="rounded-circle bg-info bg-opacity-10 d-inline-flex align-items-center justify-content-center mb-2" style={{ width: 48, height: 48 }}>
                 <i className="bi bi-database-fill fs-5 text-info"></i>
               </div>
-              <div className="text-muted small text-uppercase mb-1">Cosmos NoSQL</div>
+              <div className="text-muted small text-uppercase mb-1">CosmosDB</div>
               <div className="fs-4 fw-bold">
                 {health ? (
                   health.backends.cosmosdb_nosql ? (

@@ -52,7 +52,7 @@ export function Navbar() {
             <div className="d-flex gap-3">
               <span className="backend-indicator text-light">
                 <span className={`dot ${health.backends.cosmosdb_nosql ? "healthy" : "unhealthy"}`}></span>
-                Cosmos NoSQL
+                CosmosDB
               </span>
               <span className="backend-indicator text-light">
                 <span className={`dot ${health.backends.azure_documentdb ? "healthy" : "unhealthy"}`}></span>
@@ -68,8 +68,8 @@ export function Navbar() {
             value={vectorStoreType}
             onChange={(e) => setVectorStoreType(e.target.value as VectorStoreType)}
           >
-            <option value="Azure DocumentDB">Azure DocumentDB</option>
-            <option value="CosmosDB NoSQL">CosmosDB NoSQL</option>
+            <option value="DocumentDB">DocumentDB</option>
+            <option value="CosmosDB">CosmosDB</option>
           </select>
         </div>
       </div>

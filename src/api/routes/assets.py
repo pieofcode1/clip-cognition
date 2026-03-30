@@ -19,7 +19,7 @@ router = APIRouter(prefix="/assets", tags=["assets"])
 
 @router.get("/videos", summary="List all processed video assets")
 def list_video_assets(
-    vector_store_type: str = Query(default="CosmosDB NoSQL"),
+    vector_store_type: str = Query(default="DocumentDB"),
     limit: int = Query(default=20, ge=1, le=100),
 ):
     """Return metadata for all video assets stored in the database."""
@@ -47,7 +47,7 @@ def list_video_assets(
 @router.get("/videos/{asset_id}", response_model=VideoAssetDetailResponse, summary="Get a single video asset")
 def get_video_asset(
     asset_id: str,
-    vector_store_type: str = Query(default="CosmosDB NoSQL"),
+    vector_store_type: str = Query(default="DocumentDB"),
 ):
     """Fetch full metadata for a video asset by its ID, including a fresh SAS URL for playback."""
     try:
@@ -87,7 +87,7 @@ def get_video_asset(
 @router.get("/videos/{asset_id}/frames", summary="List frames for a video asset")
 def list_video_frames(
     asset_id: str,
-    vector_store_type: str = Query(default="CosmosDB NoSQL"),
+    vector_store_type: str = Query(default="DocumentDB"),
     limit: int = Query(default=50, ge=1, le=200),
 ):
     """Return frame summaries for a given video asset, including SAS URLs for each frame image."""

@@ -9,8 +9,8 @@ from pydantic import BaseModel, field_validator
 
 
 class VectorStoreType(str, Enum):
-    CosmosNoSQL = "CosmosDB NoSQL"
-    AzureDocumentDB = "Azure DocumentDB"
+    CosmosNoSQL = "CosmosDB"
+    AzureDocumentDB = "DocumentDB"
 
 
 class TokenUsage(BaseModel):

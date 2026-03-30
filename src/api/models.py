@@ -42,7 +42,7 @@ class VideoProcessingResult(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str
-    vector_store_type: str = "CosmosDB NoSQL"
+    vector_store_type: str = "DocumentDB"
     limit: int = Field(default=3, ge=1, le=20)
 
 
