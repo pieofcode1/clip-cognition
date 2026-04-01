@@ -104,15 +104,15 @@ export default function HomePage() {
               </li>
               <li>
                 <i className="bi bi-database text-primary me-2"></i>
-                <strong>CosmosDB</strong>{" \u2014 Operational + vector store"}
+                <strong>Cosmos DB</strong>{" \u2014 Operational + vector store"}
               </li>
               <li>
                 <i className="bi bi-hdd-stack text-primary me-2"></i>
-                <strong>DocumentDB</strong>{" \u2014 MongoDB-compatible vectors"}
+                <strong>Document DB</strong>{" \u2014 Operational + MongoDB-compatible vector store"}
               </li>
               <li>
                 <i className="bi bi-cloud text-primary me-2"></i>
-                <strong>Azure Blob Storage</strong>{" \u2014 Video & frame media"}
+                <strong>Azure Blob Storage</strong>{" \u2014 Video, Audio & frames"}
               </li>
               <li>
                 <i className="bi bi-code-slash text-primary me-2"></i>
@@ -120,7 +120,7 @@ export default function HomePage() {
               </li>
               <li>
                 <i className="bi bi-shield-lock text-primary me-2"></i>
-                <strong>Managed Identity</strong>{" \u2014 Passwordless RBAC"}
+                <strong>Managed Identity</strong>{" \u2014 Passwordless Azure RBAC"}
               </li>
             </ul>
 
@@ -151,7 +151,7 @@ export default function HomePage() {
                       className={`nav-link ${archTab === "data" ? "active" : ""}`}
                       onClick={() => setArchTab("data")}
                     >
-                      DocumentDB
+                      Document DB
                     </button>
                   </li>
                   <li className="nav-item">
