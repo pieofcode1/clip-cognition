@@ -1,43 +1,60 @@
 # ClipCognition
 
-Intelligent media processing and video RAG using Azure OpenAI & Cosmos DB.
+![ClipCognition Banner](media/banner.png)
+
+**Intelligent Video Analytics** — upload videos, extract frames, transcribe audio, generate AI summaries, and search across your entire video library using semantic similarity. Powered by Azure AI.
+
+## What is ClipCognition?
+
+ClipCognition is an end-to-end video RAG (Retrieval-Augmented Generation) platform that turns raw video into searchable, summarized knowledge. It combines Azure OpenAI's vision, speech, and embedding models with vector-enabled databases to let you ask natural-language questions across your video library and get back the exact frames and moments that match.
+
+### How It Works
+
+1. **Upload & Analyze** — Upload a video file. ClipCognition extracts frames at your chosen interval, transcribes audio with Whisper, and generates GPT-4o summaries for every frame.
+2. **Store & Index** — Summaries and vector embeddings are persisted in Azure DocumentDB or Cosmos DB NoSQL with vector indexing. Media files (video, audio, frames) are stored in Azure Blob Storage.
+3. **Search & Discover** — Ask natural-language questions across your video library. Semantic vector search returns the most relevant frames and plays the source video at the matching timestamp.
+
+### Application Architecture
 
 ClipCognition is a two-tier application:
 
 - **FastAPI backend** — runs the video processing, embedding, and search logic in a Docker container (Azure Container Instances)
 - **Next.js React frontend** — modern web UI that calls the API
 
-Capabilities:
+### Key Capabilities
 
 - **Extracts frames** from uploaded videos at configurable intervals
 - **Transcribes audio** using Azure OpenAI Whisper
 - **Summarizes** each frame and audio using GPT-4o
-- **Generates vector embeddings** and stores them in Azure Cosmos DB or Azure DocumentDB
+- **Generates vector embeddings** (text-embedding-3-large, 1536 dimensions) and stores them with vector indexing
 - **Enables semantic search** across video content via vector similarity
-- **Dual vector-store support** — switch between Cosmos DB NoSQL and Azure DocumentDB at query time
+- **Dual vector-store support** — switch between Azure DocumentDB and Cosmos DB NoSQL at query time
+- **Playback offset** — search results jump directly to the matching timestamp in the video
+
+### Technology Stack
+
+| Layer | Technology |
+|---|---|
+| LLM (vision + text) | Azure OpenAI GPT-4o |
+| Audio transcription | Azure OpenAI Whisper |
+| Embeddings | Azure OpenAI text-embedding-3-large (1536 dims) |
+| Vector store (primary) | Azure DocumentDB (MongoDB vCore — HNSW vector search) |
+| Vector store (secondary) | Azure Cosmos DB NoSQL (native vector search) |
+| Blob storage | Azure Blob Storage |
+| API runtime | FastAPI + Uvicorn (Docker → Azure Container Instances) |
+| Frontend | Next.js 16 + React + Bootstrap 5 |
+| Identity | User-Assigned Managed Identity (passwordless Azure RBAC) |
+| IaC | Bicep + Azure Developer CLI (azd) |
 
 ## Architecture
-
-### Cosmos DB
-
-![Media RAG with Cosmos DB](media/arch_cosmosdb.png)
 
 ### DocumentDB
 
 ![Media RAG with DocumentDB](media/arch_docdb.png)
 
-| Component | Azure Service |
-|---|---|
-| API runtime | Azure Container Instances (Docker) |
-| Container registry | Azure Container Registry |
-| LLM (vision + text) | Azure OpenAI GPT-4o |
-| Audio transcription | Azure OpenAI Whisper |
-| Embeddings | Azure OpenAI text-embedding-3-large |
-| Vector store (NoSQL) | Azure Cosmos DB NoSQL (native vector search) |
-| Vector store (MongoDB) | Azure DocumentDB (MongoDB vCore — HNSW/IVF vector search) |
-| Blob storage | Azure Storage |
-| Identity | Managed Identity (User-Assigned) |
-| IaC | Bicep + Azure Developer CLI (azd) |
+### Cosmos DB
+
+![Media RAG with Cosmos DB](media/arch_cosmosdb.png)
 
 ## Prerequisites
 
@@ -193,16 +210,16 @@ All endpoints that query the database accept a `vector_store_type` parameter (`C
 
 ## Vector Store Backends
 
-### CosmosDB
-- Uses native [vector search](https://learn.microsoft.com/azure/cosmos-db/nosql/vector-search) with `quantizedFlat` indexes
-- Authentication via managed identity (RBAC, no keys)
-- Data plane access through the Cosmos DB SDK
-
-### DocumentDB (MongoDB vCore)
+### DocumentDB (MongoDB vCore) — Primary
 - Uses [HNSW or IVF vector indexes](https://learn.microsoft.com/azure/cosmos-db/mongodb/vcore/vector-search) via the MongoDB wire protocol
 - Authentication via connection string (username/password)
 - Control plane RBAC via managed identity (Contributor role)
 - Firewall rules for Azure services and developer IP
+
+### CosmosDB NoSQL
+- Uses native [vector search](https://learn.microsoft.com/azure/cosmos-db/nosql/vector-search) with `quantizedFlat` indexes
+- Authentication via managed identity (RBAC, no keys)
+- Data plane access through the Cosmos DB SDK
 
 ## Infrastructure
 

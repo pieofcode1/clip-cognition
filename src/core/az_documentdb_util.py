@@ -15,7 +15,17 @@ class AzDocumentDBClient:
     """Client wrapper for Azure DocumentDB with vector search support."""
 
     def __init__(self, connection_uri: str, db_name: str, embedding_agent=None) -> None:
-        self.mongodb_client = MongoClient(connection_uri)
+        try:
+            self.mongodb_client = MongoClient(
+                connection_uri,
+                serverSelectionTimeoutMS=10000,
+                connectTimeoutMS=10000,
+            )
+        except Exception as exc:
+            raise ConnectionError(
+                f"Failed to connect to DocumentDB. Check your MONGODB_CONNECTION_STRING "
+                f"and ensure DNS/network connectivity to the server: {exc}"
+            ) from exc
         self.database = self.mongodb_client[db_name]
         self.embedding_agent = embedding_agent
 
